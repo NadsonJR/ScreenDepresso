@@ -10,7 +10,7 @@ from screendepresso import updater
 def manifest(content=b'package', version='0.3.0'):
     filename = f'screendepresso_{version}_amd64.deb'
     return {'version': version, 'linux-amd64': {
-        'url': f'https://github.com/NadsonJR/ScreenDepresso-releases/releases/download/v{version}/{filename}',
+        'url': f'https://github.com/NadsonJR/ScreenDepresso/releases/download/v{version}/{filename}',
         'sha256': hashlib.sha256(content).hexdigest(), 'size': len(content)}}
 
 

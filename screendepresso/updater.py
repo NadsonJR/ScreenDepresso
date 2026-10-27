@@ -11,7 +11,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-REPOSITORY = 'NadsonJR/ScreenDepresso-releases'
+REPOSITORY = 'NadsonJR/ScreenDepresso'
 LATEST_MANIFEST = f'https://github.com/{REPOSITORY}/releases/latest/download/update.json'
 MAX_PACKAGE_SIZE = 600 * 1024 * 1024
 

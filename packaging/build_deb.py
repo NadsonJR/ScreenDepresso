@@ -92,7 +92,7 @@ def main():
     run('dpkg-deb', '--root-owner-group', '--build', '-Zxz', str(stage), str(package))
     digest = hashlib.file_digest(package.open('rb'), 'sha256').hexdigest()
     manifest = {'version': __version__, 'linux-amd64': {
-        'url': f'https://github.com/NadsonJR/ScreenDepresso-releases/releases/download/v{__version__}/{filename}',
+        'url': f'https://github.com/NadsonJR/ScreenDepresso/releases/download/v{__version__}/{filename}',
         'sha256': digest, 'size': package.stat().st_size}}
     (output / 'update.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (output / 'SHA256SUMS').write_text(f'{digest}  {filename}\n')

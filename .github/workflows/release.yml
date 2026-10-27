@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -60,8 +60,7 @@ jobs:
       - name: Publish downloadable release
         if: github.ref_type == 'tag'
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          test -n "$GH_TOKEN" || { echo '::error::Configure RELEASES_TOKEN with Contents read/write access to NadsonJR/ScreenDepresso-releases.'; exit 1; }
-          test "$(gh repo view NadsonJR/ScreenDepresso-releases --json isPrivate --jq .isPrivate)" = false
-          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/update.json dist/SHA256SUMS --repo NadsonJR/ScreenDepresso-releases --target main --title "ScreenDepresso $GITHUB_REF_NAME" --notes-file packaging/RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/update.json dist/SHA256SUMS --repo "$GH_REPO" --verify-tag --title "ScreenDepresso $GITHUB_REF_NAME" --notes-file packaging/RELEASE_NOTES.md
