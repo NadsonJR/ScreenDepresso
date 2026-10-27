@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ScreenDepresso
+Comment=Capture e anote imagens da tela
+Exec=/usr/bin/screendepresso
+Icon=screendepresso
+Terminal=false
+Categories=Graphics;Utility;
+StartupWMClass=screendepresso

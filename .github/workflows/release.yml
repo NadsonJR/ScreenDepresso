@@ -1,0 +1,58 @@
+name: Build Linux installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgssapi-krb5-2 libegl1 libgl1 libglib2.0-0t64 libfontconfig1 libdbus-1-3 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-shape0 libxcb-randr0 libxcb-xfixes0 libxcb-sync1 libxcb-xkb1 libxcb-util1
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --extra build
+      - name: Validate tag and run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "$GITHUB_REF_NAME" = "v$(uv run --frozen python -c 'from screendepresso import __version__; print(__version__)')"
+          fi
+          uv run --frozen pytest -q
+      - name: Build installer and update manifest
+        run: uv run --frozen python packaging/build_deb.py
+      - name: Install and smoke-test packaged application
+        run: |
+          sudo apt-get install -y ./dist/screendepresso_*_amd64.deb
+          /usr/bin/screendepresso --version
+          XDG_DATA_HOME="$RUNNER_TEMP/screendepresso-smoke" /usr/bin/screendepresso --smoke-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screendepresso-linux-amd64
+          path: |
+            dist/*.deb
+            dist/update.json
+            dist/SHA256SUMS
+          if-no-files-found: error
+      - name: Publish downloadable release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo '::error::Configure RELEASES_TOKEN with Contents read/write access to NadsonJR/ScreenDepresso-releases.'; exit 1; }
+          test "$(gh repo view NadsonJR/ScreenDepresso-releases --json isPrivate --jq .isPrivate)" = false
+          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/update.json dist/SHA256SUMS --repo NadsonJR/ScreenDepresso-releases --target main --title "ScreenDepresso $GITHUB_REF_NAME" --notes-file packaging/RELEASE_NOTES.md

@@ -229,7 +229,11 @@ def windows():
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        from . import __version__
+        from .update_dialog import UpdateDialog
         self.setWindowTitle('ScreenDepresso')
+        self.menuBar().addAction('Atualizações…', lambda: UpdateDialog(self).exec())
+        self.menuBar().addAction('Sobre', lambda: QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nUbuntu / GNOME / X11'))
         self.resize(1100, 760)
         self.history = History()
         self.canvas = Canvas()
@@ -362,12 +366,27 @@ class MainWindow(QMainWindow):
 
 
 def main():
-    if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
+    if '--version' in sys.argv:
+        from . import __version__
+        print(__version__)
+        return
+    if '--smoke-test' in sys.argv:
+        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+    if '--smoke-test' not in sys.argv and os.environ.get('XDG_SESSION_TYPE') == 'wayland':
         sys.exit('Este MVP requer uma sessão X11. Selecione Ubuntu on Xorg no login.')
     app = QApplication(sys.argv)
     app.setApplicationName('ScreenDepresso')
     window = MainWindow()
     window.show()
+    if '--smoke-test' in sys.argv:
+        image = QImage(100, 100, QImage.Format.Format_ARGB32)
+        image.fill(QColor('red'))
+        window.finish_capture(image)
+        window.copy()
+        if QApplication.clipboard().image() != image or window.list.count() < 1:
+            raise RuntimeError('Smoke test failed')
+        print('Interface, histórico e clipboard: OK (offscreen)', flush=True)
+        QTimer.singleShot(100, app.quit)
     sys.exit(app.exec())
 
 
