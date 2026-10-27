@@ -1,3 +1,16 @@
+## Novidades da versão 0.5.0
+
+- Suporte a Windows 10/11 x64: capturas, janelas, seleção de região, atalhos globais, bandeja e atualização pelo instalador.
+- Instalador `.exe` por usuário, com atalhos no menu Iniciar e desinstalador; inclui o runtime Python.
+- Versão do aplicativo sempre visível no rodapé.
+- Release com instaladores Windows e Ubuntu, além de manifesto e checksums comuns.
+
+### Windows
+
+Baixe `screendepresso_*_windows_amd64_setup.exe`. Requer Windows 10 build 19041+ ou Windows 11 x64. O instalador não é assinado com Authenticode nesta versão; o SmartScreen pode exibir um aviso. Baixe somente a release oficial. Capturas e preferências ficam em `%LOCALAPPDATA%\ScreenDepresso` e são preservadas ao desinstalar ou atualizar.
+
+Para atualizar, salve as edições e use Settings → Updates. O aplicativo fecha após iniciar o instalador verificado.
+
 ## Novidades da versão 0.4.2
 
 - Intensidade do desfoque integrada ao menu do próprio botão lateral.

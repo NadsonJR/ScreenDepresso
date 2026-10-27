@@ -10,11 +10,12 @@ from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
+from .platform_support import capture_desktop, data_directory, global_hotkeys_available
 
 class History:
 
     def __init__(self, directory=None):
-        self.directory = Path(directory or Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'screendepresso')
+        self.directory = Path(directory) if directory is not None else data_directory()
         self.directory.mkdir(parents=True, exist_ok=True)
 
     def save(self, image):
@@ -71,6 +72,9 @@ class Selector(QWidget):
             self.cancelled.emit()
 
 def windows():
+    if sys.platform == 'win32':
+        from .windows_backend import windows as list_windows
+        return list_windows()
     from Xlib import X, display
     connection = display.Display()
     try:
@@ -231,6 +235,10 @@ class MainWindow(QMainWindow):
         ribbon.addAction(history_action)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
         self.statusBar().addPermanentWidget(self.dimensions)
+        from . import __version__
+        self.version_label = QLabel(f'v{__version__}')
+        self.version_label.setToolTip(tr('Application version'))
+        self.statusBar().addPermanentWidget(self.version_label)
         self.canvas.changed.connect(self.update_dimensions)
         self.refresh()
         self.hotkeys = Hotkeys()
@@ -238,7 +246,7 @@ class MainWindow(QMainWindow):
         self.hotkeys.failed.connect(lambda message: self.statusBar().showMessage(message))
         QApplication.instance().aboutToQuit.connect(self.hotkeys.stop)
         self.show_shortcuts()
-        if os.environ.get('DISPLAY') and '--smoke-test' not in sys.argv:
+        if global_hotkeys_available() and '--smoke-test' not in sys.argv:
             try:
                 self.hotkeys.configure(self.settings.hotkeys)
             except Exception as exc:
@@ -279,12 +287,13 @@ class MainWindow(QMainWindow):
     def check_updates(self):
         from .update_dialog import UpdateDialog
         dialog = UpdateDialog(self)
+        dialog.quit_requested.connect(self.request_quit)
         dialog.perform()
         dialog.exec()
 
     def show_about(self):
         from . import __version__
-        QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nUbuntu / GNOME / X11')
+        QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nWindows / Linux X11')
 
     def ask_close_action(self):
         from .close_dialog import CloseDialog
@@ -396,12 +405,12 @@ class MainWindow(QMainWindow):
     def apply_settings(self, directory, hotkeys, language=None):
         old = self.settings.hotkeys.copy()
         changed = hotkeys != old
-        if changed and os.environ.get('DISPLAY'):
+        if changed and global_hotkeys_available():
             self.hotkeys.configure(hotkeys)
         try:
             self.settings.save(directory, hotkeys, language)
         except OSError:
-            if changed and os.environ.get('DISPLAY'):
+            if changed and global_hotkeys_available():
                 self.hotkeys.configure(old)
             raise
         set_language(self.settings.language)
@@ -439,12 +448,10 @@ class MainWindow(QMainWindow):
 
     def take_capture(self, mode, target):
         try:
-            screen = QApplication.primaryScreen()
-            pixmap = screen.grabWindow(0)
+            pixmap, geometry = capture_desktop()
             if pixmap.isNull():
                 raise RuntimeError(tr('Capture unavailable. Run in an X11 session.'))
             if mode == 'região':
-                geometry = QRect(QPoint(0, 0), pixmap.deviceIndependentSize().toSize())
                 self.selector = Selector(pixmap, geometry)
                 self.selector.selected.connect(lambda rect: self.finish_capture(pixmap.copy(QRect(round(rect.x() * pixmap.devicePixelRatio()), round(rect.y() * pixmap.devicePixelRatio()), round(rect.width() * pixmap.devicePixelRatio()), round(rect.height() * pixmap.devicePixelRatio()))).toImage()))
                 self.selector.cancelled.connect(self.open_editor)
@@ -453,7 +460,7 @@ class MainWindow(QMainWindow):
                 return
             if target is not None:
                 ratio = pixmap.devicePixelRatio()
-                target = QRect(round(target.x() * ratio), round(target.y() * ratio), round(target.width() * ratio), round(target.height() * ratio))
+                target = QRect(round((target.x()-geometry.x()) * ratio), round((target.y()-geometry.y()) * ratio), round(target.width() * ratio), round(target.height() * ratio))
                 pixmap = pixmap.copy(target.intersected(pixmap.rect()))
             self.finish_capture(pixmap.toImage())
         except Exception as exc:
@@ -505,7 +512,7 @@ def main():
         return
     if '--smoke-test' in sys.argv:
         os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-    if '--smoke-test' not in sys.argv and os.environ.get('XDG_SESSION_TYPE') == 'wayland':
+    if sys.platform != 'win32' and '--smoke-test' not in sys.argv and os.environ.get('XDG_SESSION_TYPE') == 'wayland':
         sys.exit(tr('This MVP requires an X11 session. Select Ubuntu on Xorg at login.'))
     app = QApplication(sys.argv)
     app.setApplicationName('screendepresso')

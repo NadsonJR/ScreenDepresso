@@ -104,6 +104,14 @@ CATALOG.update({
  'Minimize to tray': 'Minimizar para a bandeja',
  'Minimize to taskbar': 'Minimizar para a barra de tarefas',
 })
+CATALOG.update({
+ 'Application version': 'Versão do aplicativo',
+ 'This key is not supported on Windows.': 'Esta tecla não é suportada no Windows.',
+ 'Could not register global hotkeys.': 'Não foi possível registrar os atalhos globais.',
+ 'Updates are only available for Windows and Linux x86_64.': 'Atualizações disponíveis somente para Windows e Linux x86_64.',
+ '?\nThe app will close to install the update. Save your edits first. Your captures will be preserved.': '?\nO aplicativo será fechado para instalar a atualização. Salve suas edições antes. Suas capturas serão preservadas.',
+ 'Installer started. The application will now close.': 'Instalador iniciado. O aplicativo será fechado agora.',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None

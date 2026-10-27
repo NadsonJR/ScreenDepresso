@@ -1,4 +1,4 @@
-name: Build Linux installer
+name: Build installers
 
 on:
   push:
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -57,10 +57,76 @@ jobs:
             dist/update.json
             dist/SHA256SUMS
           if-no-files-found: error
-      - name: Publish downloadable release
-        if: github.ref_type == 'tag'
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --extra build
+      - name: Validate tag and run Windows tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        shell: pwsh
+        run: |
+          $version = uv run --frozen python -c "from screendepresso import __version__; print(__version__)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") { throw 'Version does not match tag' }
+          uv run --frozen pytest -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build Windows installer
+        run: uv run --frozen python packaging/build_windows.py
+      - name: Install and smoke-test Windows application
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist/*_windows_amd64_setup.exe | Select-Object -First 1
+          $target = Join-Path $env:RUNNER_TEMP 'screendepresso-installed'
+          $process = Start-Process $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$target") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+          $env:XDG_CONFIG_HOME = Join-Path $env:RUNNER_TEMP 'screendepresso-config'
+          $env:XDG_DATA_HOME = Join-Path $env:RUNNER_TEMP 'screendepresso-data'
+          $env:SCREENDEPRESSO_TEST_EXE = Join-Path $target 'screendepresso.exe'
+          uv run --frozen python -c "import os, subprocess; subprocess.run([os.environ['SCREENDEPRESSO_TEST_EXE'], '--smoke-test'], check=True, timeout=30)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screendepresso-windows-amd64
+          path: |
+            dist/*_windows_amd64_setup.exe
+            dist/windows-update.json
+            dist/WINDOWS-SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    needs: [build, windows]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: screendepresso-linux-amd64
+          path: dist/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: screendepresso-windows-amd64
+          path: dist/windows
+      - name: Verify installers and merge update metadata
+        run: python packaging/merge_release.py dist/linux dist/windows dist/release
+      - name: Publish Linux and Windows installers
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/update.json dist/SHA256SUMS --repo "$GH_REPO" --verify-tag --title "ScreenDepresso $GITHUB_REF_NAME" --notes-file packaging/RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" dist/linux/*.deb dist/windows/*_setup.exe dist/release/update.json dist/release/SHA256SUMS --repo "$GH_REPO" --verify-tag --title "ScreenDepresso $GITHUB_REF_NAME" --notes-file packaging/RELEASE_NOTES.md

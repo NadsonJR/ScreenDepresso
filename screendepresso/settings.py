@@ -26,8 +26,9 @@ def parse_hotkey(value):
 class Settings:
 
     def __init__(self, path=None):
-        self.path = Path(path or Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'screendepresso/settings.json')
-        self.directory = str(Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'screendepresso')
+        from .platform_support import config_path, data_directory
+        self.path = Path(path) if path is not None else config_path()
+        self.directory = str(data_directory())
         self.hotkeys = DEFAULT_HOTKEYS.copy()
         self.language = 'en'
         try:
@@ -123,10 +124,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(buttons)
 
     def check_updates(self):
-        from .update_dialog import UpdateDialog
-        dialog = UpdateDialog(self)
-        dialog.perform()
-        dialog.exec()
+        self.owner.check_updates()
 
     def browse(self):
         directory = QFileDialog.getExistingDirectory(self, tr('Capture directory'), self.directory.text())

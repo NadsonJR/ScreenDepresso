@@ -1,2 +1,2 @@
-"""ScreenDepresso Linux MVP."""
-__version__ = '0.4.2'
+"""ScreenDepresso desktop screenshot editor."""
+__version__ = '0.5.0'

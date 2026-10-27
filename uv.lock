@@ -347,7 +347,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pillow" },
     { name = "pyside6" },
-    { name = "python-xlib" },
+    { name = "python-xlib", marker = "sys_platform == 'linux'" },
 ]
 
 [package.optional-dependencies]
@@ -364,7 +364,7 @@ requires-dist = [
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.11,<7" },
     { name = "pyside6", specifier = ">=6.8,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "python-xlib", specifier = ">=0.33,<1" },
+    { name = "python-xlib", marker = "sys_platform == 'linux'", specifier = ">=0.33,<1" },
 ]
 provides-extras = ["dev", "build"]
 

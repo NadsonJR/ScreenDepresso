@@ -15,10 +15,10 @@ def manifest(content=b'package', version='0.3.0'):
 
 
 def test_select_new_version():
-    release = updater.Release.parse(manifest(version='0.10.0'), '0.9.0', 'x86_64')
+    release = updater.Release.parse(manifest(version='0.10.0'), '0.9.0', 'x86_64', system='Linux')
     assert release.version == '0.10.0'
-    assert updater.Release.parse(manifest(), '0.3.0', 'x86_64') is None
-    assert updater.Release.parse(manifest(), '1.0.0', 'x86_64') is None
+    assert updater.Release.parse(manifest(), '0.3.0', 'x86_64', system='Linux') is None
+    assert updater.Release.parse(manifest(), '1.0.0', 'x86_64', system='Linux') is None
 
 
 @pytest.mark.parametrize('field,value', [('url', 'https://evil.example/app.deb'), ('sha256', 'bad'), ('size', -1), ('size', updater.MAX_PACKAGE_SIZE + 1)])
@@ -26,7 +26,7 @@ def test_reject_untrusted_manifest(field, value):
     data = manifest()
     data['linux-amd64'][field] = value
     with pytest.raises(ValueError):
-        updater.Release.parse(data, '0.2.0', 'x86_64')
+        updater.Release.parse(data, '0.2.0', 'x86_64', system='Linux')
 
 
 @pytest.mark.parametrize('url', ['http://github.com/file', 'https://evil.example/file', 'https://user:pass@github.com/file', 'https://github.com:444/file'])
@@ -38,7 +38,7 @@ def test_reject_unsafe_urls(url):
 def test_download_verifies_and_preserves_bytes(monkeypatch, tmp_path):
     monkeypatch.setattr(updater.tempfile, 'mkdtemp', lambda **kwargs: str(tmp_path))
     monkeypatch.setattr(updater, 'open_url', lambda url: io.BytesIO(b'package'))
-    release = updater.Release.parse(manifest(), '0.2.0', 'x86_64')
+    release = updater.Release.parse(manifest(), '0.2.0', 'x86_64', system='Linux')
     path = updater.download_release(release)
     assert path.read_bytes() == b'package'
 
@@ -49,7 +49,7 @@ def test_bad_download_removed(monkeypatch, tmp_path, content):
     directory.mkdir()
     monkeypatch.setattr(updater.tempfile, 'mkdtemp', lambda **kwargs: str(directory))
     monkeypatch.setattr(updater, 'open_url', lambda url: io.BytesIO(content))
-    release = updater.Release.parse(manifest(), '0.2.0', 'x86_64')
+    release = updater.Release.parse(manifest(), '0.2.0', 'x86_64', system='Linux')
     with pytest.raises(ValueError):
         updater.download_release(release)
     assert not directory.exists()
@@ -63,7 +63,7 @@ def test_network_error_removes_partial_download(monkeypatch, tmp_path):
         raise OSError('Network unavailable')
     monkeypatch.setattr(updater, 'open_url', failure)
     with pytest.raises(OSError):
-        updater.download_release(updater.Release.parse(manifest(), '0.2.0', 'x86_64'))
+        updater.download_release(updater.Release.parse(manifest(), '0.2.0', 'x86_64', system='Linux'))
     assert not directory.exists()
 
 
@@ -78,6 +78,7 @@ def test_restore_system_environment(monkeypatch):
 
 def test_check_update_reads_manifest(monkeypatch):
     import json
+    monkeypatch.setattr(updater.platform, 'system', lambda: 'Linux')
     monkeypatch.setattr(updater, 'open_url', lambda url: io.BytesIO(json.dumps(manifest()).encode()))
     assert updater.check_update('0.2.0').version == '0.3.0'
 
@@ -90,7 +91,7 @@ def test_check_update_rejects_oversized_manifest(monkeypatch):
 
 def test_unsupported_architecture():
     with pytest.raises(ValueError, match='x86_64'):
-        updater.Release.parse(manifest(), '0.2.0', 'aarch64')
+        updater.Release.parse(manifest(), '0.2.0', 'aarch64', system='Linux')
 
 
 def test_redirect_cannot_downgrade_to_http():

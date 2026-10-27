@@ -8,5 +8,6 @@ def noninteractive_window_cleanup(monkeypatch):
     Close-flow tests override these methods to exercise each explicit user choice.
     """
     from screendepresso.app import MainWindow
+    monkeypatch.setattr('screendepresso.app.global_hotkeys_available', lambda: False)
     monkeypatch.setattr(MainWindow, 'ask_close_action', lambda self: 'quit')
     monkeypatch.setattr(MainWindow, '_quit_application', lambda self: None)

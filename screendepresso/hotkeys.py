@@ -4,7 +4,7 @@ import threading
 from PySide6.QtCore import QObject, Signal
 from .settings import parse_hotkey
 
-class Hotkeys(QObject):
+class X11Hotkeys(QObject):
     capture = Signal(str)
     failed = Signal(str)
 
@@ -83,3 +83,11 @@ class Hotkeys(QObject):
                 self.failed.emit(str(exc))
         self.thread = threading.Thread(target=listen, daemon=True)
         self.thread.start()
+
+
+def Hotkeys():
+    import sys
+    if sys.platform == 'win32':
+        from .windows_backend import WindowsHotkeys
+        return WindowsHotkeys()
+    return X11Hotkeys()

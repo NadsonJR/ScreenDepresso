@@ -46,14 +46,16 @@ class Release:
     size: int
 
     @classmethod
-    def parse(cls, data, current_version, machine=None):
+    def parse(cls, data, current_version, machine=None, system=None):
         version = data.get('version')
         if version_tuple(version) <= version_tuple(current_version):
             return None
-        if (machine or platform.machine()) not in ('x86_64', 'amd64'):
-            raise ValueError(tr('Updates are only available for Linux x86_64.'))
-        filename = f'screendepresso_{version}_amd64.deb'
-        package = data.get('linux-amd64', {})
+        system = system or platform.system()
+        if (machine or platform.machine()).lower() not in ('x86_64', 'amd64') or system not in ('Linux', 'Windows'):
+            raise ValueError(tr('Updates are only available for Windows and Linux x86_64.'))
+        windows = system == 'Windows'
+        filename = f'screendepresso_{version}_windows_amd64_setup.exe' if windows else f'screendepresso_{version}_amd64.deb'
+        package = data.get('windows-amd64' if windows else 'linux-amd64', {})
         url = f'https://github.com/{REPOSITORY}/releases/download/v{version}/{filename}'
         if package.get('url') != url:
             raise ValueError(tr('Invalid package source.'))
@@ -95,6 +97,7 @@ def download_release(release):
 def system_environment():
     """Undo PyInstaller's library overrides before launching system binaries."""
     env = os.environ.copy()
+    env['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
     original = env.pop('LD_LIBRARY_PATH_ORIG', None)
     if original:
         env['LD_LIBRARY_PATH'] = original
@@ -103,3 +106,21 @@ def system_environment():
     for name in ('QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH', 'QML2_IMPORT_PATH'):
         env.pop(name, None)
     return env
+
+
+def start_windows_installer(path):
+    """Detach the verified installer; it outlives the current app during upgrade."""
+    import ctypes
+    import subprocess
+    import sys
+    bundled = getattr(sys, 'frozen', False)
+    kernel = None
+    if bundled and sys.platform == 'win32':
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.SetDllDirectoryW.argtypes = [ctypes.c_wchar_p]
+        kernel.SetDllDirectoryW(None)
+    try:
+        return subprocess.Popen([str(path), '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'], env=system_environment())
+    finally:
+        if kernel is not None:
+            kernel.SetDllDirectoryW(getattr(sys, '_MEIPASS', None))

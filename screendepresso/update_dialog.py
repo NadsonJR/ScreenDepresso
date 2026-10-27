@@ -1,15 +1,17 @@
 from .i18n import tr
+import sys
 import shutil
 import threading
 from pathlib import Path
 from PySide6.QtCore import QProcess, QProcessEnvironment, Signal
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QMessageBox
 from . import __version__
-from .updater import check_update, download_release, system_environment
+from .updater import check_update, download_release, system_environment, start_windows_installer
 
 class UpdateDialog(QDialog):
     completed = Signal(str, object)
     failed = Signal(str)
+    quit_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -20,7 +22,8 @@ class UpdateDialog(QDialog):
         self.busy = False
         self.process = None
         layout = QVBoxLayout(self)
-        self.label = QLabel(f"{tr('Installed version: ')}{__version__}\nUbuntu 24.04+ • x86_64 • X11")
+        description = 'Windows 10/11 • x64' if sys.platform == 'win32' else 'Ubuntu 24.04+ • x86_64 • X11'
+        self.label = QLabel(f"{tr('Installed version: ')}{__version__}\n{description}")
         self.label.setWordWrap(True)
         layout.addWidget(self.label)
         self.button = QPushButton(tr('Check for updates'))
@@ -46,7 +49,8 @@ class UpdateDialog(QDialog):
             self.label.setText(tr('Checking published versions on GitHub…'))
             self.job('check', lambda: check_update(__version__))
         else:
-            answer = QMessageBox.question(self, tr('Install update'), tr('Download and install version ') + self.release.version + tr('?\nUbuntu will request administrator authorization. Your captures will be preserved.'))
+            notice = tr('?\nThe app will close to install the update. Save your edits first. Your captures will be preserved.') if sys.platform == 'win32' else tr('?\nUbuntu will request administrator authorization. Your captures will be preserved.')
+            answer = QMessageBox.question(self, tr('Install update'), tr('Download and install version ') + self.release.version + notice)
             if answer == QMessageBox.StandardButton.Yes:
                 self.label.setText(tr('Downloading and verifying the package…'))
                 self.job('download', lambda: download_release(self.release))
@@ -64,6 +68,16 @@ class UpdateDialog(QDialog):
                 self.button.setToolTip(tr('Download and install'))
         else:
             self.package = Path(result)
+            if sys.platform == 'win32':
+                try:
+                    start_windows_installer(self.package)
+                except OSError as exc:
+                    self.on_failed(str(exc))
+                    return
+                self.label.setText(tr('Installer started. The application will now close.'))
+                self.button.setEnabled(False)
+                self.quit_requested.emit()
+                return
             if not Path('/usr/bin/pkexec').exists() or not Path('/usr/bin/apt-get').exists():
                 self.label.setText(tr('Verified package saved to:\n') + str(result) + tr('\nInstall it using the Ubuntu package manager.'))
                 return

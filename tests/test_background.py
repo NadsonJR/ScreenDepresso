@@ -129,3 +129,12 @@ def test_application_smoke_test_exits_without_close_prompt(tmp_path):
     result = subprocess.run([sys.executable, '-m', 'screendepresso.app', '--smoke-test'], env=env, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
     assert 'OK (offscreen)' in result.stdout
+
+
+def test_version_is_permanently_visible_in_footer(window):
+    from screendepresso import __version__
+    assert window.version_label.text() == f'v{__version__}'
+    assert window.version_label.isVisible()
+    window.statusBar().showMessage('A temporary message')
+    assert window.version_label.isVisible()
+    assert window.version_label.text() == f'v{__version__}'
