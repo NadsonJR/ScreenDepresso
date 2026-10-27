@@ -78,8 +78,10 @@ jobs:
           $version = uv run --frozen python -c "from screendepresso import __version__; print(__version__)"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") { throw 'Version does not match tag' }
-          uv run --frozen pytest -q
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run --frozen pytest -q --junitxml=windows-tests.xml
+          $testExit = $LASTEXITCODE
+          if ($testExit -ne 0) { uv run --frozen python packaging/report_tests.py windows-tests.xml }
+          exit $testExit
       - name: Build Windows installer
         run: uv run --frozen python packaging/build_windows.py
       - name: Install and smoke-test Windows application
