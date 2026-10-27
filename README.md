@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.4.0)
+## Instalador e atualizações (v0.4.1)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.4.0_amd64.deb
+sudo apt install ./screendepresso_0.4.1_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.4.0` e `git push origin v0.4.0`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.4.1` e `git push origin v0.4.1`.
 4. O workflow **Build Linux installer** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -119,3 +119,13 @@ Os controles também estão traduzidos em **Português (Brasil)**. Marcadores e 
 ### Dicas ao passar o mouse
 
 Mantenha o cursor sobre um botão ou controle para ver o nome da função. As dicas incluem atalhos quando disponíveis, como **Save (Ctrl+S)**, **Paste image (Ctrl+V)** e **Undo (Ctrl+Z)**. Estão disponíveis nas barras superior e lateral, no menu, nos controles de cor e desfoque e nas configurações. As dicas seguem o idioma escolhido em **Settings → Language**.
+
+## Menus de cor nas ferramentas laterais (0.4.1)
+
+Os botões laterais de **Arrow**, **Rectangle** e **Numbered markers** têm dois controles: clique no ícone para selecionar a ferramenta; clique na pequena seta ao lado para abrir seu menu de cor. O próprio ícone exibe a cor atual.
+
+- **Arrow color…** e **Rectangle color…** alteram o objeto selecionado do tipo correspondente e a cor dos próximos objetos desse tipo. Outros objetos existentes mantêm suas cores.
+- **Marker color…** continua alterando todos os marcadores da imagem e os próximos marcadores.
+- Mudar ou cancelar uma cor preserva a seleção; as alterações podem ser desfeitas e refeitas. Os menus e dicas acompanham o idioma escolhido.
+
+A barra superior usa um disquete para **Save** e duas folhas sobrepostas para **Copy image**. A ferramenta **Select / move** usa uma mão aberta.

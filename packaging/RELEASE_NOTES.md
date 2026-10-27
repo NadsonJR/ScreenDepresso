@@ -1,3 +1,10 @@
+## Novidades da versão 0.4.1
+
+- Seletores de cor integrados aos menus dos botões laterais de marcadores, retângulos e setas.
+- Setas com cor personalizável para o objeto selecionado e as próximas setas, incluindo desfazer/refazer.
+- Ícones atualizados: disquete para salvar, duas folhas para copiar e mão aberta para selecionar/mover.
+- Controles de cor removidos da faixa superior, com indicação da cor nos próprios ícones laterais.
+
 ## Novidades da versão 0.4.0
 
 - Dicas ao passar o mouse nos botões e controles, com nomes e atalhos traduzidos.

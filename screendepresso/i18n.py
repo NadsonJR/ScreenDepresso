@@ -78,6 +78,8 @@ CATALOG.update({'Capture full screen': 'Capturar tela inteira', 'Capture window'
 CATALOG.update({
  'Blur strength (1–100)': 'Intensidade do desfoque (1–100)',
  'Click a capture to open it in the editor.': 'Clique em uma captura para abri-la no editor.',
+ 'Arrow color…': 'Cor da seta…',
+ 'Arrow color': 'Cor da seta',
  'Rectangle color…': 'Cor do retângulo…',
  'Rectangle color': 'Cor do retângulo',
  'Change the selected rectangle and the color of new rectangles.': 'Altere o retângulo selecionado e a cor dos novos retângulos.',

@@ -125,21 +125,75 @@ def test_color_buttons_and_translations(tmp_path, monkeypatch):
         assert window.canvas.tool == 'numero'
         gesture(window.canvas, (40, 40), (100, 80))
         monkeypatch.setattr(QColorDialog, 'getColor', lambda *a, **kw: QColor('#3366ff'))
-        window.marker_color_button.click()
+        window.color_actions['numero'].trigger()
         assert window.canvas.marker_color == '#3366ff'
         window.choose_tool('retângulo')
         gesture(window.canvas, (80, 15), (140, 55))
-        window.rectangle_color_button.click()
+        window.color_actions['retângulo'].trigger()
         assert window.canvas.objects[-1]['color'] == '#3366ff'
         history_size = len(window.canvas.undo_stack)
         monkeypatch.setattr(QColorDialog, 'getColor', lambda *a, **kw: QColor())
-        window.marker_color_button.click()
-        window.rectangle_color_button.click()
+        window.color_actions['numero'].trigger()
+        window.color_actions['retângulo'].trigger()
         assert len(window.canvas.undo_stack) == history_size
         window.apply_settings(window.settings.directory, window.settings.hotkeys, 'pt_BR')
         assert window.tool_actions['numero'].text() == 'Marcadores numerados'
-        assert window.marker_color_button.text() == 'Cor dos marcadores…'
-        assert window.rectangle_color_button.text() == 'Cor do retângulo…'
+        assert window.color_actions['numero'].text() == 'Cor dos marcadores…'
+        assert window.color_actions['retângulo'].text() == 'Cor do retângulo…'
+    finally:
+        window.close()
+        set_language('en')
+
+
+def test_arrow_color_affects_selected_and_next_arrow_with_undo():
+    canvas = Canvas()
+    canvas.load(image())
+    canvas.tool = 'seta'
+    gesture(canvas, (10, 10), (50, 50))
+    canvas.tool = 'seta'
+    gesture(canvas, (80, 20), (140, 80))
+    original = canvas.image
+    canvas.set_arrow_color('#1565c0')
+    assert canvas.objects[0]['color'] == '#ef233c'
+    assert canvas.objects[1]['color'] == '#1565c0'
+    assert canvas.image.pixelColor(110, 50).blue() > canvas.image.pixelColor(110, 50).red()
+    blue = canvas.image
+    canvas.undo()
+    assert canvas.image == original
+    assert canvas.arrow_color == '#ef233c'
+    canvas.redo()
+    assert canvas.image == blue
+    canvas.tool = 'seta'
+    gesture(canvas, (10, 90), (70, 110))
+    assert canvas.objects[-1]['color'] == '#1565c0'
+
+
+def test_sidebar_split_buttons_select_tools_and_expose_color_menus(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QToolBar, QToolButton
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path/'config'))
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path/'data'))
+    monkeypatch.delenv('DISPLAY', raising=False)
+    window = MainWindow()
+    try:
+        tools = window.findChild(QToolBar, 'tools')
+        for kind in ('numero', 'retângulo', 'seta'):
+            button = tools.widgetForAction(window.tool_actions[kind])
+            assert button.popupMode() == QToolButton.ToolButtonPopupMode.MenuButtonPopup
+            assert window.color_actions[kind] in button.menu().actions()
+            assert window.color_actions[kind].toolTip()
+            button.click()
+            assert window.canvas.tool == kind
+        window.canvas.load(image())
+        gesture(window.canvas, (20, 20), (100, 80))
+        monkeypatch.setattr(QColorDialog, 'getColor', lambda *a, **kw: QColor('#00aa00'))
+        window.color_actions['seta'].trigger()
+        assert window.canvas.objects[-1]['color'] == '#00aa00'
+        history_size = len(window.canvas.undo_stack)
+        monkeypatch.setattr(QColorDialog, 'getColor', lambda *a, **kw: QColor())
+        window.color_actions['seta'].trigger()
+        assert len(window.canvas.undo_stack) == history_size
+        window.apply_settings(window.settings.directory, window.settings.hotkeys, 'pt_BR')
+        assert window.color_actions['seta'].text() == 'Cor da seta…'
     finally:
         window.close()
         set_language('en')

@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize, QEvent
 from PySide6.QtGui import QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolTip
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolTip, QToolButton
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .settings import Settings, SettingsDialog
@@ -130,8 +130,8 @@ class MainWindow(QMainWindow):
                 action.setShortcut(QKeySequence(shortcut))
             bar.addAction(action)
             return action
-        add_action(ribbon, tr('Save'), '▣', self.save, '#54894d', 'Ctrl+S')
-        add_action(ribbon, tr('Copy image'), '▤', self.copy, '#54894d', 'Ctrl+C')
+        add_action(ribbon, tr('Save'), 'save', self.save, '#54894d', 'Ctrl+S')
+        add_action(ribbon, tr('Copy image'), 'copy', self.copy, '#54894d', 'Ctrl+C')
         add_action(ribbon, tr('Paste image'), '+', self.paste, '#54894d', 'Ctrl+V')
         ribbon.addSeparator()
         add_action(ribbon, tr('Undo'), '↶', self.canvas.undo, '#b87b2d', 'Ctrl+Z')
@@ -148,11 +148,27 @@ class MainWindow(QMainWindow):
         tools.setMovable(False)
         tools.setIconSize(QSize(40, 40))
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tools)
-        for name, label, symbol in [('selecionar', tr('Select / move'), '↖'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('numero', tr('Numbered markers'), '1'), ('desfoque', tr('Blur outside selection'), 'blur'), ('recorte', tr('Crop selection'), 'crop')]:
+        for name, label, symbol in [('selecionar', tr('Select / move'), 'hand'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('numero', tr('Numbered markers'), '1'), ('desfoque', tr('Blur outside selection'), 'blur'), ('recorte', tr('Crop selection'), 'crop')]:
             action = add_action(tools, label, symbol, lambda checked=False, t=name: self.choose_tool(t))
             action.setCheckable(True)
             self.tool_group.addAction(action)
             self.tool_actions[name] = action
+        self.color_actions = {}
+        for name, label, callback in [('numero', 'Marker color…', self.choose_marker_color), ('retângulo', 'Rectangle color…', self.choose_rectangle_color), ('seta', 'Arrow color…', self.choose_arrow_color)]:
+            button = tools.widgetForAction(self.tool_actions[name])
+            menu = QMenu(button)
+            menu.setToolTipsVisible(True)
+            color_action = menu.addAction(tr(label), callback)
+            color_action.setToolTip(tr(label))
+            self.color_actions[name] = color_action
+            button.setMenu(menu)
+            button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.canvas.marker_color_changed.connect(self.display_marker_color)
+        self.canvas.rectangle_color_changed.connect(self.display_rectangle_color)
+        self.canvas.arrow_color_changed.connect(self.display_arrow_color)
+        self.display_marker_color(self.canvas.marker_color)
+        self.display_rectangle_color(self.canvas.rectangle_color)
+        self.display_arrow_color(self.canvas.arrow_color)
         self.tool_actions[self.canvas.tool].setChecked(True)
         self.canvas.tool_changed.connect(self.sync_tool)
         tools.addSeparator()
@@ -170,18 +186,6 @@ class MainWindow(QMainWindow):
         self.tool_hint.setMinimumWidth(0)
         self.tool_hint.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         options_row.addWidget(self.tool_hint, 1)
-        self.marker_color_button = QPushButton(tr('Marker color…'))
-        self.marker_color_button.setToolTip(tr('Change the color of all markers in this image.'))
-        self.marker_color_button.clicked.connect(self.choose_marker_color)
-        self.canvas.marker_color_changed.connect(self.display_marker_color)
-        self.display_marker_color(self.canvas.marker_color)
-        options_row.addWidget(self.marker_color_button)
-        self.rectangle_color_button = QPushButton(tr('Rectangle color…'))
-        self.rectangle_color_button.setToolTip(tr('Change the selected rectangle and the color of new rectangles.'))
-        self.rectangle_color_button.clicked.connect(self.choose_rectangle_color)
-        self.canvas.rectangle_color_changed.connect(self.display_rectangle_color)
-        self.display_rectangle_color(self.canvas.rectangle_color)
-        options_row.addWidget(self.rectangle_color_button)
         blur_label = QLabel(tr('Blur strength:'))
         blur_label.setToolTip(tr('Select a blur effect to change its strength.'))
         options_row.addWidget(blur_label)
@@ -266,6 +270,18 @@ class MainWindow(QMainWindow):
         self.tool_hint.setText(hints[name])
         self.tool_hint.setToolTip(hints[name])
 
+    def choose_arrow_color(self):
+        obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
+        current = obj.get('color', '#ef233c') if obj is not None and obj['kind'] == 'seta' else self.canvas.arrow_color
+        color = QColorDialog.getColor(QColor(current), self, tr('Arrow color'), QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if color.isValid():
+            self.canvas.set_arrow_color(color)
+
+    def display_arrow_color(self, color):
+        icon = toolbar_icon('arrow', color)
+        self.tool_actions['seta'].setIcon(icon)
+        self.color_actions['seta'].setIcon(icon)
+
     def choose_rectangle_color(self):
         obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
         current = obj.get('color', '#ef233c') if obj is not None and obj['kind'] == 'retângulo' else self.canvas.rectangle_color
@@ -274,7 +290,9 @@ class MainWindow(QMainWindow):
             self.canvas.set_rectangle_color(color)
 
     def display_rectangle_color(self, color):
-        self.rectangle_color_button.setIcon(toolbar_icon('rectangle', color))
+        icon = toolbar_icon('rectangle', color)
+        self.tool_actions['retângulo'].setIcon(icon)
+        self.color_actions['retângulo'].setIcon(icon)
 
     def choose_marker_color(self):
         color = QColorDialog.getColor(QColor(self.canvas.marker_color), self, tr('Marker color'), QColorDialog.ColorDialogOption.DontUseNativeDialog)
@@ -282,7 +300,9 @@ class MainWindow(QMainWindow):
             self.canvas.set_marker_color(color)
 
     def display_marker_color(self, color):
-        self.marker_color_button.setIcon(toolbar_icon('1', color))
+        icon = toolbar_icon('1', color)
+        self.tool_actions['numero'].setIcon(icon)
+        self.color_actions['numero'].setIcon(icon)
 
     def update_dimensions(self):
         self.dimensions.setText(f'{self.canvas.base.width()} × {self.canvas.base.height()} px • 100%')

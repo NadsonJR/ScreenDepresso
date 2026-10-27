@@ -29,6 +29,7 @@ class Canvas(QWidget):
     tool_changed = Signal(str)
     marker_color_changed = Signal(str)
     rectangle_color_changed = Signal(str)
+    arrow_color_changed = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -42,6 +43,7 @@ class Canvas(QWidget):
         self.blur_radius = 14
         self.marker_color = '#ef233c'
         self.rectangle_color = '#ef233c'
+        self.arrow_color = '#ef233c'
         self.begin = self.end = None
         self.pending = None
         self.action = None
@@ -58,9 +60,11 @@ class Canvas(QWidget):
         self.finish_text()
         self._tool = value
         self.tool_changed.emit(value)
+        if value == 'seta':
+            self.arrow_color_changed.emit(self.arrow_color)
         if value == 'retângulo':
             self.rectangle_color_changed.emit(self.rectangle_color)
-        self.setCursor(Qt.CursorShape.ArrowCursor if value == 'selecionar' else Qt.CursorShape.CrossCursor)
+        self.setCursor(Qt.CursorShape.OpenHandCursor if value == 'selecionar' else Qt.CursorShape.CrossCursor)
 
     @property
     def image(self):
@@ -83,11 +87,12 @@ class Canvas(QWidget):
         return {key: QImage(value) if isinstance(value, QImage) else copy.deepcopy(value) for key, value in obj.items()}
 
     def snapshot(self):
-        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color)
+        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color)
 
     def restore(self, state):
         self.finish_text(False)
-        self.base, self.objects, self.marker_color, self.rectangle_color = state
+        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color = state
+        self.arrow_color_changed.emit(self.arrow_color)
         self.rectangle_color_changed.emit(self.rectangle_color)
         self.marker_color_changed.emit(self.marker_color)
         self.selected = None
@@ -144,6 +149,22 @@ class Canvas(QWidget):
             if obj['kind'] == 'numero':
                 obj['number'] = number
                 number += 1
+
+    def set_arrow_color(self, color):
+        self.finish_text()
+        color = QColor(color)
+        if not color.isValid():
+            return
+        obj = self.objects[self.selected] if self.selected is not None else None
+        name = color.name()
+        if name == self.arrow_color and (obj is None or obj['kind'] != 'seta' or obj.get('color', '#ef233c') == name):
+            return
+        before = self.snapshot()
+        self.arrow_color = name
+        if obj is not None and obj['kind'] == 'seta':
+            obj['color'] = name
+        self.arrow_color_changed.emit(name)
+        self.commit(before)
 
     def set_rectangle_color(self, color):
         self.finish_text()
@@ -222,6 +243,7 @@ class Canvas(QWidget):
         elif obj['kind'] == 'imagem':
             p.drawImage(rect, obj['image'])
         elif obj['kind'] == 'seta':
+            p.setPen(QPen(QColor(obj.get('color', '#ef233c')), 4))
             a, b = (QPoint(*obj['a']), QPoint(*obj['b']))
             p.drawLine(a, b)
             angle = math.atan2(b.y() - a.y(), b.x() - a.x())
@@ -288,6 +310,8 @@ class Canvas(QWidget):
             if self.selected is not None:
                 obj = self.objects[self.selected]
                 self.action = 'marker_center' if obj['kind'] == 'numero' and math.hypot(point.x()-obj['a'][0], point.y()-obj['a'][1]) <= 24 else 'move'
+                if obj['kind'] == 'seta':
+                    self.arrow_color_changed.emit(obj.get('color', '#ef233c'))
                 if obj['kind'] == 'retângulo':
                     self.rectangle_color_changed.emit(obj.get('color', '#ef233c'))
                 if self.objects[self.selected]['kind'] == 'desfoque':
@@ -296,6 +320,8 @@ class Canvas(QWidget):
             return
         self.selected = None
         self.pending = {'kind': self.tool, 'a': [point.x(), point.y()], 'b': [point.x(), point.y()], 'radius': self.blur_radius}
+        if self.tool == 'seta':
+            self.pending['color'] = self.arrow_color
         if self.tool == 'retângulo':
             self.pending['color'] = self.rectangle_color
         if self.tool == 'numero':
@@ -422,7 +448,7 @@ class Canvas(QWidget):
                 self.commit(before)
         self._tool = 'selecionar'
         self.tool_changed.emit('selecionar')
-        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.update()
 
     def mouseDoubleClickEvent(self, event):
