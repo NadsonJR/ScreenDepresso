@@ -84,7 +84,7 @@ def test_check_update_reads_manifest(monkeypatch):
 
 def test_check_update_rejects_oversized_manifest(monkeypatch):
     monkeypatch.setattr(updater, 'open_url', lambda url: io.BytesIO(b'x' * 70000))
-    with pytest.raises(ValueError, match='limite'):
+    with pytest.raises(ValueError, match='limit'):
         updater.check_update('0.2.0')
 
 

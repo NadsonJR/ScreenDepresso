@@ -64,7 +64,7 @@ def test_rebind_and_conflict_rollback(x11):
         code = x11.keysym_to_keycode(XK.string_to_keysym('5'))
         x11.screen().root.grab_key(code, X.ControlMask | X.ShiftMask, False, X.GrabModeAsync, X.GrabModeAsync)
         x11.sync()
-        with pytest.raises(ValueError, match='ocupado'):
+        with pytest.raises(ValueError, match='in use'):
             hotkeys.configure(dict(DEFAULT_HOTKEYS, tela='Ctrl+Shift+5'))
         captured.clear()
         press(x11, '4')

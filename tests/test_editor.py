@@ -151,19 +151,62 @@ def test_crop_preserves_editable_annotations():
     assert canvas.objects[0]['a'] == [20, 20]
 
 
-def test_text_content_edit(monkeypatch):
-    from PySide6.QtWidgets import QInputDialog
-    monkeypatch.setattr(QInputDialog, 'getText', lambda *a, **kw: ('Primeiro', True))
+def test_text_content_edit():
     canvas = Canvas()
     canvas.load(image())
     canvas.tool = 'texto'
-    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(10, 10))
+    gesture(canvas, (10, 10), (150, 90))
+    assert canvas.text_editor is not None
+    canvas.text_editor.setPlainText('Primeiro')
+    QTest.keyClick(canvas.text_editor, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
     assert canvas.objects[0]['text'] == 'Primeiro'
-    monkeypatch.setattr(QInputDialog, 'getText', lambda *a, **kw: ('Editado', True))
+    assert canvas.image != image()
+    assert canvas.base == image()
     QTest.mouseDClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(30, 25))
+    assert canvas.text_editor is not None
+    canvas.text_editor.setPlainText('Editado')
+    canvas.finish_text()
     assert canvas.objects[0]['text'] == 'Editado'
     canvas.undo()
     assert canvas.objects[0]['text'] == 'Primeiro'
+    canvas.redo()
+    assert canvas.objects[0]['text'] == 'Editado'
+
+
+def test_text_preview_and_cancel_keep_image_visible():
+    canvas = Canvas()
+    canvas.load(image())
+    canvas.tool = 'texto'
+    QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=QPoint(10, 10))
+    QTest.mouseMove(canvas, QPoint(150, 90))
+    assert canvas.render_image(True) == image()
+    QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=QPoint(150, 90))
+    canvas.text_editor.setPlainText('Cancelar')
+    QTest.keyClick(canvas.text_editor, Qt.Key.Key_Escape)
+    assert canvas.image == image()
+    assert canvas.objects == []
+    assert not canvas.undo_stack
+
+
+def test_empty_text_is_not_inserted_and_multiline_is_visible():
+    canvas = Canvas()
+    canvas.load(image())
+    canvas.tool = 'texto'
+    gesture(canvas, (10, 10), (150, 100))
+    canvas.finish_text()
+    assert canvas.objects == []
+    canvas.tool = 'texto'
+    gesture(canvas, (10, 10), (150, 100))
+    canvas.text_editor.setPlainText('Linha 1\nLinha 2')
+    canvas.finish_text()
+    result = canvas.image
+    assert result.copy(10, 10, 140, 30) != image().copy(10, 10, 140, 30)
+    assert result.copy(10, 40, 140, 40) != image().copy(10, 40, 140, 40)
+    assert result.pixelColor(0, 0) == QColor('white')
+    canvas.undo()
+    assert canvas.objects == []
+    canvas.redo()
+    assert canvas.objects[0]['text'] == 'Linha 1\nLinha 2'
 
 
 def test_high_dpi_image_uses_pixel_coordinates():
@@ -174,3 +217,78 @@ def test_high_dpi_image_uses_pixel_coordinates():
     assert canvas.base.devicePixelRatio() == 1
     drag(canvas, 'seta')
     assert canvas.image.pixelColor(60, 50) != QColor('white')
+
+
+def test_typing_text_and_clicking_outside_confirms_without_popup():
+    canvas = Canvas()
+    canvas.load(image())
+    canvas.show()
+    canvas.tool = 'texto'
+    gesture(canvas, (10, 10), (150, 90))
+    editor = canvas.text_editor
+    QTest.keyClicks(editor, 'Texto digitado')
+    assert editor.toPlainText() == 'Texto digitado'
+    # Canvas click commits text as a single document operation.
+    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(155, 110))
+    assert canvas.text_editor is None
+    assert canvas.objects[0]['text'] == 'Texto digitado'
+    assert len(canvas.undo_stack) == 1
+    assert canvas.image != image()
+    canvas.close()
+
+
+def test_pasted_image_is_editable_and_undoable():
+    canvas = Canvas()
+    canvas.load(image())
+    overlay = QImage(40, 30, QImage.Format.Format_ARGB32)
+    overlay.fill(QColor('blue'))
+    assert canvas.paste_image(overlay)
+    obj = canvas.objects[0]
+    assert obj['kind'] == 'imagem'
+    assert canvas.image.pixelColor(70, 50) == QColor('blue')
+    assert canvas.image.pixelColor(0, 0) == QColor('white')
+    gesture(canvas, tuple(obj['b']), (130, 100))
+    assert canvas.objects[0]['b'] == [130, 100]
+    canvas.undo()
+    assert canvas.objects[0]['b'] == [99, 74]
+    canvas.redo()
+    assert canvas.objects[0]['b'] == [130, 100]
+    canvas.delete_selected()  # Redo clears selection: select again first.
+    gesture(canvas, (75, 60), (80, 65))
+    assert canvas.objects[0]['a'] != [60, 45]
+    canvas.delete_selected()
+    assert canvas.objects == []
+    canvas.undo()
+    assert canvas.objects[0]['image'] == overlay
+
+
+def test_paste_fits_large_images_and_keeps_alpha():
+    canvas = Canvas()
+    canvas.load(image())
+    overlay = QImage(400, 300, QImage.Format.Format_ARGB32)
+    overlay.fill(QColor(0, 0, 255, 128))
+    canvas.paste_image(overlay)
+    assert canvas.object_rect(canvas.objects[0]).size() == canvas.base.size()
+    color = canvas.image.pixelColor(20, 20)
+    assert color.blue() == 255
+    assert 120 <= color.red() <= 130
+    canvas.undo()
+    assert canvas.image == image()
+    canvas.redo()
+    assert canvas.objects[0]['kind'] == 'imagem'
+
+
+def test_image_paste_during_text_edit_commits_both_layers():
+    canvas = Canvas()
+    canvas.load(image())
+    canvas.tool = 'texto'
+    gesture(canvas, (10, 10), (150, 100))
+    canvas.text_editor.setPlainText('Label')
+    app.clipboard().setImage(image().copy(0, 0, 20, 20))
+    QTest.keyClick(canvas.text_editor, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+    assert canvas.text_editor is None
+    assert [obj['kind'] for obj in canvas.objects] == ['texto', 'imagem']
+    canvas.undo()
+    assert [obj['kind'] for obj in canvas.objects] == ['texto']
+    canvas.undo()
+    assert not canvas.objects

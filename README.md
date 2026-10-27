@@ -39,17 +39,17 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.3.0)
+## Instalador e atualizações (v0.3.1)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.3.0_amd64.deb
+sudo apt install ./screendepresso_0.3.1_amd64.deb
 ```
 
-Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Atualizações… → Verificar atualizações → Baixar e instalar**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
+Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
 
 O atualizador consulta releases estáveis e rejeita versões iguais ou anteriores. Requer HTTPS e acesso ao GitHub. O SHA-256 verifica integridade em relação ao manifesto servido pelo GitHub; não é uma assinatura independente do publicador. Nenhuma credencial é incluída no instalador.
 
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.3.0` e `git push origin v0.3.0`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.3.1` e `git push origin v0.3.1`.
 4. O workflow **Build Linux installer** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -78,7 +78,7 @@ O Dockerfile faz build, instala e verifica o pacote. Em redes corporativas, use 
 
 Para remover o aplicativo, use `sudo apt remove screendepresso`. O histórico do usuário é preservado.
 
-## Edição e configurações (0.3.0)
+## Edição e configurações (0.3.1)
 
 - **Ctrl+Z** desfaz; **Ctrl+Y** refaz. Uma nova edição após desfazer descarta o caminho de refazer.
 - Após inserir uma anotação, o editor entra em **Selecionar**. Arraste o objeto para mover; arraste uma das duas alças para redimensionar ou ajustar as extremidades de uma seta. **Delete** exclui o objeto selecionado. Dê duplo clique no texto para editar seu conteúdo. O recorte preserva as anotações como objetos e também pode ser desfeito.
@@ -91,3 +91,17 @@ Para remover o aplicativo, use `sudo apt remove screendepresso`. O histórico do
 As preferências ficam em `$XDG_CONFIG_HOME/screendepresso/settings.json` ou `~/.config/screendepresso/settings.json`. Anotações permanecem editáveis enquanto a imagem está aberta no editor. PNG/JPEG e o histórico de imagens são rasterizados; reabri-los não recupera as camadas de edição. Salve antes de trocar de imagem ou encerrar o aplicativo.
 
 Os testes de atalhos globais usam um servidor X11 virtual isolado quando `Xvfb` está instalado (`sudo apt install xvfb`). Sem ele, esse teste é explicitamente marcado como ignorado; o workflow do Actions instala o servidor para executá-lo.
+
+## Interface e texto direto na imagem (0.3.1)
+
+A interface usa tons escuros, barra superior de ações, ferramentas na lateral esquerda e imagem centralizada. O botão **Histórico** abre ou recolhe a lista de capturas à direita. A ferramenta ativa fica destacada; a faixa acima da imagem mostra instruções de uso.
+
+Para inserir texto, selecione **A**, arraste a caixa na imagem e digite nela. Um clique simples também cria uma caixa com tamanho inicial. Use **Ctrl+Enter** ou clique fora para confirmar; **Esc** cancela; Enter sozinho insere uma nova linha. O duplo clique sobre um texto existente abre a edição no próprio local. Use Selecionar para mover ou redimensionar a caixa. O texto usa tamanho de fonte estável de 24 px e quebra de linha dentro da caixa.
+
+Não há popup de texto. A imagem permanece visível durante a edição, e copiar/salvar confirma o texto pendente antes de exportar. Confirmar uma anotação conta como uma operação de desfazer/refazer; uma caixa vazia ou cancelada não altera a imagem.
+
+### Colagem, desfoque e idiomas
+
+- **Paste image / Ctrl+V** insere a imagem da área de transferência como uma camada sobre a imagem aberta. Ela pode ser movida, redimensionada, excluída e desfeita/refeita. Imagens grandes são ajustadas ao tamanho da tela de edição; a transparência é preservada. Sem uma imagem aberta, a colagem inicia uma nova imagem.
+- O slider **Blur strength** e o campo numérico aceitam intensidades de **1 a 100**. Selecione o objeto de desfoque e ajuste o controle para modificar um efeito existente. O valor também define a intensidade do próximo efeito. A área selecionada continua nítida.
+- A interface usa **English** por padrão. Em **Settings → Language**, escolha **English** ou **Português (Brasil)** e salve. Menus, ferramentas, configurações e mensagens mudam imediatamente; a preferência é mantida ao reabrir o aplicativo.

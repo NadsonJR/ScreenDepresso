@@ -1,13 +1,11 @@
+from .i18n import tr
 import shutil
 import threading
 from pathlib import Path
-
 from PySide6.QtCore import QProcess, QProcessEnvironment, Signal
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QMessageBox
-
 from . import __version__
 from .updater import check_update, download_release, system_environment
-
 
 class UpdateDialog(QDialog):
     completed = Signal(str, object)
@@ -15,17 +13,17 @@ class UpdateDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Atualizar ScreenDepresso')
+        self.setWindowTitle(tr('Update ScreenDepresso'))
         self.resize(460, 180)
         self.release = None
         self.package = None
         self.busy = False
         self.process = None
         layout = QVBoxLayout(self)
-        self.label = QLabel(f'Versão instalada: {__version__}\nUbuntu 24.04+ • x86_64 • X11')
+        self.label = QLabel(f"{tr('Installed version: ')}{__version__}\nUbuntu 24.04+ • x86_64 • X11")
         self.label.setWordWrap(True)
         layout.addWidget(self.label)
-        self.button = QPushButton('Verificar atualizações')
+        self.button = QPushButton(tr('Check for updates'))
         self.button.clicked.connect(self.perform)
         layout.addWidget(self.button)
         self.completed.connect(self.on_completed)
@@ -34,6 +32,7 @@ class UpdateDialog(QDialog):
     def job(self, operation, function):
         self.busy = True
         self.button.setEnabled(False)
+
         def run():
             try:
                 self.completed.emit(operation, function())
@@ -43,13 +42,12 @@ class UpdateDialog(QDialog):
 
     def perform(self):
         if self.release is None:
-            self.label.setText('Consultando versões publicadas no GitHub…')
+            self.label.setText(tr('Checking published versions on GitHub…'))
             self.job('check', lambda: check_update(__version__))
         else:
-            answer = QMessageBox.question(self, 'Instalar atualização',
-                f'Baixar e instalar a versão {self.release.version}?\nO Ubuntu solicitará autorização de administrador. Suas capturas serão preservadas.')
+            answer = QMessageBox.question(self, tr('Install update'), tr('Download and install version ') + self.release.version + tr('?\nUbuntu will request administrator authorization. Your captures will be preserved.'))
             if answer == QMessageBox.StandardButton.Yes:
-                self.label.setText('Baixando e verificando o pacote…')
+                self.label.setText(tr('Downloading and verifying the package…'))
                 self.job('download', lambda: download_release(self.release))
 
     def on_completed(self, operation, result):
@@ -58,18 +56,18 @@ class UpdateDialog(QDialog):
         if operation == 'check':
             self.release = result
             if result is None:
-                self.label.setText(f'Você está na versão mais recente ({__version__}).')
+                self.label.setText(f"{tr('You are on the latest version (')}{__version__}).")
             else:
-                self.label.setText(f'Nova versão: {result.version}\nDownload: {result.size / 1024 / 1024:.1f} MB')
-                self.button.setText('Baixar e instalar')
+                self.label.setText(f"{tr('New version: ')}{result.version}\nDownload: {result.size / 1024 / 1024:.1f} MB")
+                self.button.setText(tr('Download and install'))
         else:
             self.package = Path(result)
             if not Path('/usr/bin/pkexec').exists() or not Path('/usr/bin/apt-get').exists():
-                self.label.setText(f'Pacote verificado salvo em:\n{result}\nInstale pelo gerenciador de pacotes do Ubuntu.')
+                self.label.setText(tr('Verified package saved to:\n') + str(result) + tr('\nInstall it using the Ubuntu package manager.'))
                 return
             self.busy = True
             self.button.setEnabled(False)
-            self.label.setText('Aguardando autorização e instalação pelo Ubuntu…')
+            self.label.setText(tr('Waiting for Ubuntu authorization and installation…'))
             self.process = QProcess(self)
             env = QProcessEnvironment()
             for key, value in system_environment().items():
@@ -87,25 +85,25 @@ class UpdateDialog(QDialog):
 
     def process_error(self, error):
         if error == QProcess.ProcessError.FailedToStart:
-            self.on_failed('Não foi possível iniciar o instalador do Ubuntu.')
+            self.on_failed(tr('Could not start the Ubuntu installer.'))
             self.cleanup()
 
     def installed(self, code, status):
         self.busy = False
         self.button.setEnabled(True)
         if code == 0 and status == QProcess.ExitStatus.NormalExit:
-            self.label.setText('Atualização instalada. Feche e abra o ScreenDepresso para usar a nova versão.\nSalve suas edições antes de fechar.')
+            self.label.setText(tr('Update installed. Close and reopen ScreenDepresso to use the new version.\nSave your edits before closing.'))
             self.button.setEnabled(False)
         else:
             details = bytes(self.process.readAllStandardOutput()).decode(errors='replace')[-2000:]
-            self.on_failed('Instalação cancelada ou malsucedida. A versão atual continua disponível.\n' + details)
+            self.on_failed(tr('Installation was cancelled or failed. The current version remains available.\n') + details)
         self.cleanup()
 
     def on_failed(self, message):
         self.busy = False
         self.button.setEnabled(True)
-        self.label.setText('Não foi possível concluir a atualização. Verifique a conexão e tente novamente.')
-        QMessageBox.warning(self, 'Atualização', message)
+        self.label.setText(tr('Could not complete the update. Check your connection and try again.'))
+        QMessageBox.warning(self, tr('Update'), message)
 
     def reject(self):
         if not self.busy:

@@ -1,20 +1,18 @@
+from .i18n import tr, mode_label, set_language, translate_tree
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
-
-from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject
-from PySide6.QtGui import QKeySequence, QAction, QColor, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QMessageBox,
-    QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle, QSpinBox)
-
+from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize
+from PySide6.QtGui import QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle, QSpinBox, QSlider, QToolBar, QDockWidget
+from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
 
-
 class History:
+
     def __init__(self, directory=None):
         self.directory = Path(directory or Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'screendepresso')
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -22,12 +20,11 @@ class History:
     def save(self, image):
         path = self.directory / (datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.png')
         if not image.save(str(path), 'PNG'):
-            raise OSError('Não foi possível salvar a captura.')
+            raise OSError(tr('Could not save the capture.'))
         return path
 
     def entries(self):
         return sorted(self.directory.glob('*.png'), reverse=True)
-
 
 class Selector(QWidget):
     selected = Signal(QRect)
@@ -73,7 +70,6 @@ class Selector(QWidget):
             self.close()
             self.cancelled.emit()
 
-
 def windows():
     from Xlib import X, display
     connection = display.Display()
@@ -95,63 +91,113 @@ def windows():
     finally:
         connection.close()
 
-
 class MainWindow(QMainWindow):
+
     def __init__(self):
         super().__init__()
         from . import __version__
         from .update_dialog import UpdateDialog
         self.settings = Settings()
+        set_language(self.settings.language)
         self.setWindowTitle('ScreenDepresso')
-        self.menuBar().addAction('Configurações…', lambda: SettingsDialog(self).exec())
-        self.menuBar().addAction('Atualizações…', lambda: UpdateDialog(self).exec())
-        self.menuBar().addAction('Sobre', lambda: QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nUbuntu / GNOME / X11'))
-        self.resize(1100, 760)
+        self.menuBar().addAction(tr('Settings…'), lambda: SettingsDialog(self).exec())
+        self.menuBar().addAction(tr('Updates…'), lambda: UpdateDialog(self).exec())
+        self.menuBar().addAction(tr('About'), lambda: QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nUbuntu / GNOME / X11'))
+        self.setPalette(dark_palette())
+        self.setStyleSheet(STYLE)
+        self.resize(1280, 840)
         self.history = History(self.settings.directory)
         self.canvas = Canvas()
+        self.tool_actions = {}
+        self.tool_group = QActionGroup(self)
+        self.tool_group.setExclusive(True)
+        ribbon = QToolBar(tr('Actions'), self)
+        ribbon.setObjectName('ribbon')
+        ribbon.setMovable(False)
+        ribbon.setIconSize(QSize(42, 42))
+        ribbon.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, ribbon)
+
+        def add_action(bar, title, symbol, callback, color='#3878a8', shortcut=None):
+            action = QAction(toolbar_icon(symbol, color), title, self)
+            action.triggered.connect(callback)
+            if shortcut:
+                action.setShortcut(QKeySequence(shortcut))
+            bar.addAction(action)
+            return action
+        add_action(ribbon, tr('Save'), '▣', self.save, '#54894d', 'Ctrl+S')
+        add_action(ribbon, tr('Copy image'), '▤', self.copy, '#54894d', 'Ctrl+C')
+        add_action(ribbon, tr('Paste image'), '+', self.paste, '#54894d', 'Ctrl+V')
+        ribbon.addSeparator()
+        add_action(ribbon, tr('Undo'), '↶', self.canvas.undo, '#b87b2d', 'Ctrl+Z')
+        add_action(ribbon, tr('Redo'), '↷', self.canvas.redo, '#b87b2d', 'Ctrl+Y')
+        add_action(ribbon, tr('Crop'), 'crop', lambda: self.choose_tool('recorte'))
+        ribbon.addSeparator()
+        add_action(ribbon, tr('Full screen'), '▣', lambda: self.capture('tela'))
+        add_action(ribbon, tr('Window'), '▢', lambda: self.capture('janela'))
+        add_action(ribbon, tr('Region'), '⌗', lambda: self.capture('região'))
+        ribbon.addSeparator()
+        add_action(ribbon, tr('Settings'), '⚙', lambda: SettingsDialog(self).exec())
+        tools = QToolBar(tr('Tools'), self)
+        tools.setObjectName('tools')
+        tools.setMovable(False)
+        tools.setIconSize(QSize(40, 40))
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tools)
+        for name, label, symbol in [('selecionar', tr('Select / move'), '↖'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('desfoque', tr('Blur outside selection'), 'blur'), ('recorte', tr('Crop selection'), 'crop')]:
+            action = add_action(tools, label, symbol, lambda checked=False, t=name: self.choose_tool(t))
+            action.setCheckable(True)
+            self.tool_group.addAction(action)
+            self.tool_actions[name] = action
+        self.tool_actions[self.canvas.tool].setChecked(True)
+        self.canvas.tool_changed.connect(self.sync_tool)
+        tools.addSeparator()
+        add_action(tools, tr('Delete object (Delete)'), '×', self.canvas.delete_selected, '#a34e59', 'Delete')
         container = QWidget()
         layout = QVBoxLayout(container)
-        capture_row = QHBoxLayout()
-        for mode, label in [('tela', 'Tela inteira'), ('janela', 'Janela'), ('região', 'Região')]:
-            button = QPushButton(label)
-            button.clicked.connect(lambda checked=False, m=mode: self.capture(m))
-            capture_row.addWidget(button)
-        layout.addLayout(capture_row)
-        tools = QHBoxLayout()
-        for name in ['selecionar', 'seta', 'texto', 'retângulo', 'desfoque', 'recorte']:
-            button = QPushButton(name.capitalize())
-            button.clicked.connect(lambda checked=False, t=name: setattr(self.canvas, 'tool', t))
-            tools.addWidget(button)
-        for label, callback in [('Desfazer', self.canvas.undo), ('Refazer', self.canvas.redo), ('Copiar', self.copy), ('Salvar', self.save)]:
-            button = QPushButton(label)
-            button.clicked.connect(callback)
-            tools.addWidget(button)
-        layout.addLayout(tools)
-        blur_row = QHBoxLayout()
-        blur_row.addWidget(QLabel('Desfoque fora da seleção:'))
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        options = QWidget()
+        options.setObjectName('toolOptions')
+        options.setStyleSheet('QWidget#toolOptions { background: #292e38; }')
+        options_row = QHBoxLayout(options)
+        self.tool_hint = QLabel(tr('Arrow • Drag on the image to draw'))
+        options_row.addWidget(self.tool_hint, 1)
+        options_row.addWidget(QLabel(tr('Blur strength:')))
+        self.blur_slider = QSlider(Qt.Orientation.Horizontal)
+        self.blur_slider.setRange(1, 100)
+        self.blur_slider.setValue(14)
+        self.blur_slider.setFixedWidth(150)
+        self.blur_slider.setToolTip(tr('Select a blur effect to change its strength.'))
+        options_row.addWidget(self.blur_slider)
         self.blur_strength = QSpinBox()
         self.blur_strength.setRange(1, 100)
         self.blur_strength.setValue(14)
         self.blur_strength.valueChanged.connect(self.canvas.set_blur_radius)
+        self.blur_slider.valueChanged.connect(self.blur_strength.setValue)
+        self.blur_strength.valueChanged.connect(self.blur_slider.setValue)
         self.canvas.blur_selected.connect(self.display_blur_radius)
-        blur_row.addWidget(self.blur_strength)
-        blur_row.addWidget(QLabel('Selecionar: mover e arrastar alças • Texto: duplo clique para editar'))
-        layout.addLayout(blur_row)
-        for label, shortcut, callback in [('Desfazer', 'Ctrl+Z', self.canvas.undo), ('Refazer', 'Ctrl+Y', self.canvas.redo), ('Excluir objeto', 'Delete', self.canvas.delete_selected)]:
-            action = QAction(label, self)
-            action.setShortcut(QKeySequence(shortcut))
-            action.triggered.connect(callback)
-            self.addAction(action)
-        body = QHBoxLayout()
-        self.list = QListWidget()
-        self.list.setMaximumWidth(240)
-        self.list.itemClicked.connect(self.open_history)
-        body.addWidget(self.list)
-        scroll = QScrollArea()
-        scroll.setWidget(self.canvas)
-        body.addWidget(scroll, 1)
-        layout.addLayout(body)
+        options_row.addWidget(self.blur_strength)
+        layout.addWidget(options)
+        self.scroll = QScrollArea()
+        self.scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scroll.setWidget(self.canvas)
+        layout.addWidget(self.scroll, 1)
         self.setCentralWidget(container)
+        self.list = QListWidget()
+        self.list.itemClicked.connect(self.open_history)
+        self.history_dock = QDockWidget(tr('Capture history'), self)
+        self.history_dock.setObjectName('history')
+        self.history_dock.setWidget(self.list)
+        self.history_dock.setMinimumWidth(230)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.history_dock)
+        self.history_dock.hide()
+        history_action = self.history_dock.toggleViewAction()
+        history_action.setIcon(toolbar_icon('☷'))
+        history_action.setText(tr('History'))
+        ribbon.addAction(history_action)
+        self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
+        self.statusBar().addPermanentWidget(self.dimensions)
+        self.canvas.changed.connect(self.update_dimensions)
         self.refresh()
         self.hotkeys = Hotkeys()
         self.hotkeys.capture.connect(self.capture)
@@ -162,38 +208,54 @@ class MainWindow(QMainWindow):
             try:
                 self.hotkeys.configure(self.settings.hotkeys)
             except Exception as exc:
-                self.statusBar().showMessage(f'Atalhos indisponíveis: {exc}')
+                self.statusBar().showMessage(f"{tr('Hotkeys unavailable: ')}{exc}")
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         self.setWindowIcon(icon)
         self.tray = QSystemTrayIcon(icon, self)
         menu = QMenu(self)
-        menu.addAction('Abrir', self.showNormal)
+        menu.addAction(tr('Open'), self.showNormal)
         for mode in ['tela', 'janela', 'região']:
-            menu.addAction('Capturar ' + mode, lambda m=mode: self.capture(m))
-        menu.addAction('Sair', QApplication.quit)
+            menu.addAction(tr({'tela': 'Capture full screen', 'janela': 'Capture window', 'região': 'Capture region'}[mode]), lambda m=mode: self.capture(m))
+        menu.addAction(tr('Quit'), QApplication.quit)
         self.tray.setContextMenu(menu)
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
+
+    def choose_tool(self, name):
+        self.canvas.tool = name
+
+    def sync_tool(self, name):
+        self.tool_actions[name].setChecked(True)
+        hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp')}
+        self.tool_hint.setText(hints[name])
+
+    def update_dimensions(self):
+        self.dimensions.setText(f'{self.canvas.base.width()} × {self.canvas.base.height()} px • 100%')
 
     def display_blur_radius(self, radius):
         self.blur_strength.blockSignals(True)
         self.blur_strength.setValue(radius)
         self.blur_strength.blockSignals(False)
+        self.blur_slider.blockSignals(True)
+        self.blur_slider.setValue(radius)
+        self.blur_slider.blockSignals(False)
 
     def show_shortcuts(self):
-        self.statusBar().showMessage(' • '.join(f'{value}: {mode}' for mode, value in self.settings.hotkeys.items()))
+        self.statusBar().showMessage(' • '.join((f'{value}: {mode_label(mode)}' for mode, value in self.settings.hotkeys.items())))
 
-    def apply_settings(self, directory, hotkeys):
+    def apply_settings(self, directory, hotkeys, language=None):
         old = self.settings.hotkeys.copy()
         changed = hotkeys != old
         if changed and os.environ.get('DISPLAY'):
             self.hotkeys.configure(hotkeys)
         try:
-            self.settings.save(directory, hotkeys)
+            self.settings.save(directory, hotkeys, language)
         except OSError:
             if changed and os.environ.get('DISPLAY'):
                 self.hotkeys.configure(old)
             raise
+        set_language(self.settings.language)
+        self.sync_tool(self.canvas.tool)
         self.history = History(directory)
         self.refresh()
         self.show_shortcuts()
@@ -205,6 +267,7 @@ class MainWindow(QMainWindow):
 
     def open_history(self, item):
         self.canvas.load(QImage(str(self.history.directory / item.text())))
+        self.update_dimensions()
 
     def capture(self, mode):
         target = None
@@ -212,14 +275,14 @@ class MainWindow(QMainWindow):
             try:
                 choices = windows()
                 if not choices:
-                    raise RuntimeError('Nenhuma janela disponível.')
+                    raise RuntimeError(tr('No windows available.'))
                 labels = [f'{i + 1}. {title}' for i, (title, _) in enumerate(choices)]
-                chosen, ok = QInputDialog.getItem(self, 'Capturar janela', 'Janela visível (sem obstruções):', labels, 0, False)
+                chosen, ok = QInputDialog.getItem(self, tr('Capture window'), tr('Visible window (unobstructed):'), labels, 0, False)
                 if not ok:
                     return
                 target = choices[labels.index(chosen)][1]
             except Exception as exc:
-                QMessageBox.warning(self, 'Captura de janela', str(exc))
+                QMessageBox.warning(self, tr('Window capture'), str(exc))
                 return
         self.hide()
         QTimer.singleShot(350, lambda: self.take_capture(mode, target))
@@ -227,10 +290,9 @@ class MainWindow(QMainWindow):
     def take_capture(self, mode, target):
         try:
             screen = QApplication.primaryScreen()
-            # X11 root captures the entire virtual desktop, including other monitors.
             pixmap = screen.grabWindow(0)
             if pixmap.isNull():
-                raise RuntimeError('Captura indisponível. Execute numa sessão X11.')
+                raise RuntimeError(tr('Capture unavailable. Run in an X11 session.'))
             if mode == 'região':
                 geometry = QRect(QPoint(0, 0), pixmap.deviceIndependentSize().toSize())
                 self.selector = Selector(pixmap, geometry)
@@ -246,38 +308,45 @@ class MainWindow(QMainWindow):
             self.finish_capture(pixmap.toImage())
         except Exception as exc:
             self.showNormal()
-            QMessageBox.warning(self, 'Erro de captura', str(exc))
+            QMessageBox.warning(self, tr('Capture error'), str(exc))
 
     def finish_capture(self, image):
         self.showNormal()
         try:
             self.history.save(image)
             self.canvas.load(image)
+            self.update_dimensions()
             self.refresh()
         except OSError as exc:
-            QMessageBox.warning(self, 'Histórico', str(exc))
+            QMessageBox.warning(self, tr('History'), str(exc))
+
+    def paste(self):
+        if not self.canvas.paste_image():
+            self.statusBar().showMessage(tr('Clipboard does not contain an image.'))
+        self.update_dimensions()
 
     def copy(self):
+        self.canvas.finish_text()
         if not self.canvas.image.isNull():
             QApplication.clipboard().setImage(self.canvas.image)
-            self.statusBar().showMessage('Imagem copiada. Mantenha o aplicativo aberto para disponibilizar a área de transferência.')
+            self.statusBar().showMessage(tr('Image copied. Keep the application open to provide clipboard data.'))
 
     def save(self):
+        self.canvas.finish_text()
         if self.canvas.image.isNull():
             return
-        path, _ = QFileDialog.getSaveFileName(self, 'Salvar imagem', str(self.history.directory / 'captura.png'), 'PNG (*.png);;JPEG (*.jpg *.jpeg)')
+        path, _ = QFileDialog.getSaveFileName(self, tr('Save image'), str(self.history.directory / 'captura.png'), 'PNG (*.png);;JPEG (*.jpg *.jpeg)')
         if path:
             if not Path(path).suffix:
                 path += '.png'
             if not self.canvas.image.save(path):
-                QMessageBox.warning(self, 'Salvar', 'Não foi possível salvar nesse caminho ou formato.')
+                QMessageBox.warning(self, tr('Save'), tr('Could not save to this path or format.'))
             else:
                 try:
                     self.history.save(self.canvas.image)
                     self.refresh()
                 except OSError as exc:
-                    QMessageBox.warning(self, 'Histórico', str(exc))
-
+                    QMessageBox.warning(self, tr('History'), str(exc))
 
 def main():
     if '--version' in sys.argv:
@@ -287,7 +356,7 @@ def main():
     if '--smoke-test' in sys.argv:
         os.environ['QT_QPA_PLATFORM'] = 'offscreen'
     if '--smoke-test' not in sys.argv and os.environ.get('XDG_SESSION_TYPE') == 'wayland':
-        sys.exit('Este MVP requer uma sessão X11. Selecione Ubuntu on Xorg no login.')
+        sys.exit(tr('This MVP requires an X11 session. Select Ubuntu on Xorg at login.'))
     app = QApplication(sys.argv)
     app.setApplicationName('ScreenDepresso')
     window = MainWindow()
@@ -302,7 +371,5 @@ def main():
         print('Interface, histórico e clipboard: OK (offscreen)', flush=True)
         QTimer.singleShot(100, app.quit)
     sys.exit(app.exec())
-
-
 if __name__ == '__main__':
     main()

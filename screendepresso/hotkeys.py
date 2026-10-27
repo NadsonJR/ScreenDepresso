@@ -1,9 +1,8 @@
+from .i18n import tr
 import select
 import threading
-
 from PySide6.QtCore import QObject, Signal
 from .settings import parse_hotkey
-
 
 class Hotkeys(QObject):
     capture = Signal(str)
@@ -21,7 +20,7 @@ class Hotkeys(QObject):
         if self.thread:
             self.thread.join(timeout=2)
             if self.thread.is_alive():
-                raise RuntimeError('Não foi possível encerrar os atalhos anteriores.')
+                raise RuntimeError(tr('Could not stop the previous hotkeys.'))
         if self.connection:
             from Xlib import X
             self.connection.screen().root.ungrab_key(X.AnyKey, X.AnyModifier)
@@ -43,7 +42,7 @@ class Hotkeys(QObject):
         from Xlib import X, XK, display
         connection = display.Display()
         root = connection.screen().root
-        errors, bindings = [], {}
+        errors, bindings = ([], {})
         connection.set_error_handler(lambda err, request: errors.append(str(err)))
         try:
             masks = {'Ctrl': X.ControlMask, 'Shift': X.ShiftMask, 'Alt': X.Mod1Mask, 'Meta': X.Mod4Mask}
@@ -51,16 +50,16 @@ class Hotkeys(QObject):
                 modifiers, key = parse_hotkey(value)
                 code = connection.keysym_to_keycode(XK.string_to_keysym(key))
                 if not code:
-                    raise ValueError(f'Tecla não disponível neste teclado: {value}')
-                mask = sum(masks[m] for m in modifiers)
+                    raise ValueError(f"{tr('Key unavailable on this keyboard: ')}{value}")
+                mask = sum((masks[m] for m in modifiers))
                 if (code, mask) in bindings:
-                    raise ValueError('Atalhos duplicados.')
+                    raise ValueError(tr('Duplicate hotkeys.'))
                 bindings[code, mask] = mode
                 for locks in (0, X.LockMask, X.Mod2Mask, X.LockMask | X.Mod2Mask):
                     root.grab_key(code, mask | locks, False, X.GrabModeAsync, X.GrabModeAsync)
             connection.sync()
             if errors:
-                raise ValueError('Atalho ocupado por outro aplicativo. Escolha outra combinação.')
+                raise ValueError(tr('Hotkey is in use by another application. Choose another combination.'))
         except Exception:
             root.ungrab_key(X.AnyKey, X.AnyModifier)
             connection.sync()
@@ -69,10 +68,11 @@ class Hotkeys(QObject):
         self.connection = connection
         self.shortcuts = shortcuts.copy()
         self.stop_event.clear()
+
         def listen():
             try:
                 while not self.stop_event.is_set():
-                    if not connection.pending_events() and not select.select([connection.fileno()], [], [], 0.15)[0]:
+                    if not connection.pending_events() and (not select.select([connection.fileno()], [], [], 0.15)[0]):
                         continue
                     event = connection.next_event()
                     if event.type == X.KeyPress:

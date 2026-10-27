@@ -1,3 +1,15 @@
+## Novidades da versão 0.3.1
+
+- Slider e campo numérico para intensidade do desfoque, de 1 a 100, com edição de efeitos existentes.
+- Colar imagens como objetos sobre a imagem atual (Ctrl+V), com movimento, redimensionamento, transparência e desfazer/refazer.
+- Interface em inglês por padrão; aba Language nas configurações permite alternar imediatamente entre English e Português (Brasil).
+
+- Interface escura com ações no topo, ferramentas na lateral, imagem centralizada e histórico recolhível.
+- Texto diretamente na imagem: arraste uma caixa, digite e confirme com Ctrl+Enter ou clique fora. Esc cancela.
+- Duplo clique para reeditar o texto no mesmo local, com suporte a múltiplas linhas.
+- Corrigida a prévia de texto incompleta que podia interromper a pintura e deixar a tela preta durante o popup.
+- Copiar e salvar incluem o texto em edição, com desfazer/refazer após a confirmação.
+
 ## Novidades da versão 0.3.0
 
 - Ctrl+Z para desfazer e Ctrl+Y para refazer.

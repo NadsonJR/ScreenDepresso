@@ -66,3 +66,26 @@ def test_settings_directory_and_window_shortcuts(tmp_path, monkeypatch):
     assert other.history.directory == folder
     assert other.settings.hotkeys['tela'] == 'Alt+Print'
     other.close()
+
+
+def test_ribbon_tools_and_copy_commit_inline_text(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QToolBar
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path/'config'))
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path/'data'))
+    monkeypatch.delenv('DISPLAY', raising=False)
+    window = MainWindow()
+    window.canvas.load(image())
+    window.choose_tool('texto')
+    assert window.tool_actions['texto'].isChecked()
+    from test_editor import gesture
+    gesture(window.canvas, (10, 10), (150, 100))
+    window.canvas.text_editor.setPlainText('Na imagem')
+    window.copy()
+    assert window.canvas.text_editor is None
+    assert window.canvas.objects[0]['text'] == 'Na imagem'
+    assert QApplication.clipboard().image() == window.canvas.image
+    assert window.canvas.image != image()
+    assert window.tool_actions['selecionar'].isChecked()
+    assert window.findChild(QToolBar, 'tools').orientation() == Qt.Orientation.Vertical
+    assert window.findChild(QToolBar, 'ribbon') is not None
+    window.close()

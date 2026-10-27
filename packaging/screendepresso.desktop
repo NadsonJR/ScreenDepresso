@@ -1,7 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=ScreenDepresso
-Comment=Capture e anote imagens da tela
+Comment=Capture and annotate screenshots
+Comment[pt_BR]=Capture e anote imagens da tela
 Exec=/usr/bin/screendepresso
 Icon=screendepresso
 Terminal=false
