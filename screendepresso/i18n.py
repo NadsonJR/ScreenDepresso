@@ -96,6 +96,14 @@ CATALOG.update({
  '&Red:': '&Vermelho:', '&Green:': '&Verde:', 'Bl&ue:': '&Azul:',
  'A&lpha channel:': 'Canal a&lfa:', 'HTML:': 'HTML:',
 })
+CATALOG.update({
+ 'Close ScreenDepresso': 'Fechar ScreenDepresso',
+ 'Keep ScreenDepresso running in the background or quit?': 'Manter o ScreenDepresso em segundo plano ou encerrar?',
+ 'Minimizing keeps your image and capture hotkeys available. Save your edits before quitting.': 'Minimizar mantém a imagem e os atalhos de captura disponíveis. Salve suas edições antes de encerrar.',
+ 'The system tray is unavailable. The window will remain minimized in the taskbar.': 'A bandeja do sistema está indisponível. A janela ficará minimizada na barra de tarefas.',
+ 'Minimize to tray': 'Minimizar para a bandeja',
+ 'Minimize to taskbar': 'Minimizar para a barra de tarefas',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None

@@ -38,11 +38,6 @@ def test_hover_descriptions_and_shortcuts_are_visible_and_translated(tmp_path, m
         settings = SettingsDialog(window)
         assert settings.directory.toolTip() == 'Diretório para novas capturas e exportações:'
         assert settings.language.toolTip() == 'Idioma da interface:'
-        menu = window.menuBar()
-        action = menu.actions()[0]
-        position = menu.actionGeometry(action).center()
-        app.sendEvent(menu, QHelpEvent(QEvent.Type.ToolTip, position, menu.mapToGlobal(position)))
-        assert QToolTip.text() == 'Configurações…'
     finally:
         QToolTip.hideText()
         window.close()

@@ -27,7 +27,7 @@ Com `uv`, use `uv sync --frozen --extra dev` e `uv run screendepresso`.
 
 ## Limitações atuais
 
-Captura de janela copia sua área visível da tela, sem a decoração. Janelas sobrepostas aparecem na captura; mantenha a janela escolhida visível. A versão inicial não captura conteúdo oculto ou minimizado. Atalhos em conflito são informados na barra de status. O ícone de bandeja depende do suporte do GNOME (extensão AppIndicator); a janela e os atalhos não dependem dele. Fechar a janela encerra o aplicativo.
+Captura de janela copia sua área visível da tela, sem a decoração. Janelas sobrepostas aparecem na captura; mantenha a janela escolhida visível. A versão inicial não captura conteúdo oculto ou minimizado. Atalhos em conflito são informados na barra de status. O ícone de bandeja depende do suporte do GNOME (extensão AppIndicator); a janela e os atalhos não dependem dele. Ao fechar a janela, escolha minimizar em segundo plano, encerrar ou cancelar.
 
 O histórico é local e sem expiração automática; pode conter dados sensíveis. Desfoque é um efeito visual, não uma garantia de remoção de informação sensível. Wayland não é suportado nesta versão. Escala mista entre monitores ainda precisa de validação em hardware real.
 
@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.4.1)
+## Instalador e atualizações (v0.4.2)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.4.1_amd64.deb
+sudo apt install ./screendepresso_0.4.2_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.4.1` e `git push origin v0.4.1`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.4.2` e `git push origin v0.4.2`.
 4. O workflow **Build Linux installer** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -129,3 +129,19 @@ Os botões laterais de **Arrow**, **Rectangle** e **Numbered markers** têm dois
 - Mudar ou cancelar uma cor preserva a seleção; as alterações podem ser desfeitas e refeitas. Os menus e dicas acompanham o idioma escolhido.
 
 A barra superior usa um disquete para **Save** e duas folhas sobrepostas para **Copy image**. A ferramenta **Select / move** usa uma mão aberta.
+
+## Interface simplificada e segundo plano (0.4.2)
+
+- Abra a pequena seta do botão lateral **Blur outside selection** para ajustar **Blur strength** de 1 a 100. O controle continua alterando o efeito selecionado e a intensidade dos próximos efeitos; a seta principal do botão ativa a ferramenta.
+- **Crop** fica somente na barra superior. O botão X lateral foi removido; **Delete** continua excluindo o objeto selecionado.
+- A barra de menus Settings / Updates / About foi removida. As configurações permanecem no botão superior **Settings**, e as atualizações também estão disponíveis na aba **Updates** das configurações. O menu do ícone da bandeja inclui Settings, Check for updates e About.
+- Ao fechar pelo X da janela, o aplicativo pergunta se deseja **Minimize to tray**, **Quit** ou **Cancel**. Minimizar preserva a imagem em edição e os atalhos globais de captura. Clique no ícone da bandeja ou use **Open** no menu dele para reabrir o editor. **Quit** no menu da bandeja encerra explicitamente o aplicativo e libera os atalhos.
+- No GNOME, o ícone da bandeja depende do suporte a AppIndicator (normalmente já disponível no Ubuntu). Se não houver suporte, a opção muda para **Minimize to taskbar** e mantém a janela minimizada, com acesso pela barra de tarefas. O aplicativo não fica oculto sem um caminho para reabri-lo.
+
+Se o Ubuntu/GNOME não mostrar ícones de bandeja, instale a extensão de integração pelo sistema e habilite-a nas Extensões do GNOME:
+
+```bash
+sudo apt install gnome-shell-extension-appindicator
+```
+
+Não é necessário configurar inicialização automática para continuar em segundo plano após minimizar; o processo atual permanece ativo até a opção de encerrar. A visibilidade real do ícone e o comportamento do painel devem ser conferidos no GNOME; os testes cloud exercitam as escolhas de fechar, restaurar, manter os serviços e o fallback sem bandeja.

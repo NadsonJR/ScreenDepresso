@@ -1,3 +1,14 @@
+## Novidades da versão 0.4.2
+
+- Intensidade do desfoque integrada ao menu do próprio botão lateral.
+- Recorte somente na barra superior; botão X lateral e barra de menus removidos. Delete continua excluindo objetos.
+- Ao fechar a janela, escolha minimizar em segundo plano, encerrar ou cancelar.
+- Ícone da bandeja com comandos para abrir, capturar, configurar, verificar atualizações e sair.
+- Ao minimizar, os atalhos globais e a imagem em edição permanecem ativos.
+- Sem suporte à bandeja no desktop, a janela fica minimizada na barra de tarefas para continuar acessível.
+
+No GNOME, a bandeja usa a integração AppIndicator. As opções e mensagens estão disponíveis em inglês e português BR.
+
 ## Novidades da versão 0.4.1
 
 - Seletores de cor integrados aos menus dos botões laterais de marcadores, retângulos e setas.
