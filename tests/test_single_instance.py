@@ -19,6 +19,20 @@ def pump_until(predicate, seconds=3):
     assert predicate()
 
 
+def notify_while_servicing_events(instance):
+    # Windows named pipes require the server's event loop to accept connections.
+    # A real second launch runs in another process; do not block the primary UI.
+    import threading
+    results = []
+    worker = threading.Thread(target=lambda: results.append(instance.notify_existing()))
+    worker.start()
+    try:
+        pump_until(lambda: not worker.is_alive(), seconds=5)
+    finally:
+        worker.join(timeout=3)
+    assert results == [True]
+
+
 def test_only_one_owner_and_activation_is_delivered(tmp_path):
     owner = SingleInstance(tmp_path)
     duplicate = SingleInstance(tmp_path)
@@ -27,10 +41,10 @@ def test_only_one_owner_and_activation_is_delivered(tmp_path):
         assert owner.acquire()
         owner.set_activation_handler(lambda: calls.append('open'))
         assert not duplicate.acquire()
-        assert duplicate.notify_existing()
+        notify_while_servicing_events(duplicate)
         pump_until(lambda: calls == ['open'])
         duplicate.release()  # A non-owner must not remove the running endpoint.
-        assert duplicate.notify_existing()
+        notify_while_servicing_events(duplicate)
         pump_until(lambda: calls == ['open', 'open'])
     finally:
         owner.release()
@@ -45,7 +59,7 @@ def test_activation_during_initialization_is_not_lost(tmp_path):
     try:
         assert owner.acquire()
         assert not duplicate.acquire()
-        assert duplicate.notify_existing()
+        notify_while_servicing_events(duplicate)
         pump_until(lambda: owner.pending_activation)
         owner.set_activation_handler(lambda: calls.append('open'))
         pump_until(lambda: calls == ['open'])
@@ -105,9 +119,16 @@ def test_second_real_launch_restores_existing_window_without_loading_a_new_one(t
         env = os.environ.copy()
         env['QT_QPA_PLATFORM'] = 'offscreen'
         # The existing endpoint is live before the event loop is serviced.
-        result = subprocess.run([sys.executable, '-m', 'screendepresso.app', '--smoke-test'], env=env, capture_output=True, text=True, timeout=8)
-        assert result.returncode == 0, result.stderr
-        assert 'OK (offscreen)' not in result.stdout  # It did not construct a second editor.
+        process = subprocess.Popen([sys.executable, '-m', 'screendepresso.app', '--smoke-test'], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            pump_until(lambda: process.poll() is not None, seconds=8)
+            stdout, stderr = process.communicate(timeout=2)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=3)
+        assert process.returncode == 0, stderr
+        assert 'OK (offscreen)' not in stdout  # It did not construct a second editor.
         pump_until(window.isVisible)
     finally:
         owner.release()
