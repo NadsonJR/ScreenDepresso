@@ -1,9 +1,9 @@
 from .i18n import tr, mode_label, set_language, translate_tree
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize
+from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize, QByteArray, QBuffer, QIODevice
 from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
@@ -17,12 +17,33 @@ class History:
     def __init__(self, directory=None):
         self.directory = Path(directory) if directory is not None else data_directory()
         self.directory.mkdir(parents=True, exist_ok=True)
+        self._last_saved_time = None
 
     def save(self, image):
-        path = self.directory / (datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.png')
-        if not image.save(str(path), 'PNG'):
+        payload = QByteArray()
+        buffer = QBuffer(payload)
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        if not image.save(buffer, 'PNG'):
             raise OSError(tr('Could not save the capture.'))
-        return path
+        buffer.close()
+        stamp = datetime.now()
+        if self._last_saved_time is not None:
+            stamp = max(stamp, self._last_saved_time+timedelta(microseconds=1))
+        while True:
+            path = self.directory/(stamp.strftime('%Y%m%d-%H%M%S-%f')+'.png')
+            try:
+                stream = path.open('xb')
+            except FileExistsError:
+                stamp += timedelta(microseconds=1)
+                continue
+            try:
+                with stream:
+                    stream.write(bytes(payload))
+            except OSError:
+                path.unlink(missing_ok=True)
+                raise
+            self._last_saved_time = stamp
+            return path
 
     def entries(self):
         return sorted(self.directory.glob('*.png'), reverse=True)

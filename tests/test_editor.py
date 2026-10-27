@@ -292,3 +292,25 @@ def test_image_paste_during_text_edit_commits_both_layers():
     assert [obj['kind'] for obj in canvas.objects] == ['texto']
     canvas.undo()
     assert not canvas.objects
+
+
+def test_history_never_overwrites_when_clock_has_low_precision(tmp_path, monkeypatch):
+    from datetime import datetime as RealDatetime
+    from screendepresso import app as module
+    frozen = RealDatetime(2026, 10, 27, 12, 30)
+    class FixedClock:
+        @staticmethod
+        def now():
+            return frozen
+    monkeypatch.setattr(module, 'datetime', FixedClock)
+    first = History(tmp_path)
+    second = History(tmp_path)
+    a = first.save(image())
+    b = first.save(image())
+    different = image()
+    different.fill(QColor('blue'))
+    c = second.save(different)
+    assert len({a, b, c}) == 3
+    assert first.entries() == [c, b, a]
+    assert QImage(str(a)) == image()
+    assert QImage(str(c)) == different
