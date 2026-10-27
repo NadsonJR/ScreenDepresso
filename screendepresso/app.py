@@ -301,6 +301,14 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def activate_existing_instance(self):
+        self.open_editor()
+        dialog = QApplication.activeModalWidget()
+        if dialog is not None:
+            dialog.showNormal()
+            dialog.raise_()
+            dialog.activateWindow()
+
     def tray_activated(self, reason):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.open_editor()
@@ -540,7 +548,28 @@ def main():
     app.setApplicationDisplayName('ScreenDepresso')
     app.setDesktopFileName('screendepresso')
     app.setQuitOnLastWindowClosed(False)
+    set_language(Settings().language)
+    from .single_instance import SingleInstance
+    try:
+        instance = SingleInstance(parent=app)
+        primary = instance.acquire()
+    except (OSError, RuntimeError) as exc:
+        QMessageBox.critical(None, 'ScreenDepresso', str(exc))
+        sys.exit(1)
+    if not primary:
+        if not instance.notify_existing():
+            QMessageBox.information(None, 'ScreenDepresso', tr('ScreenDepresso is already running. Open it from the tray or taskbar.'))
+        return
+    try:
+        run_application(app, instance)
+    finally:
+        instance.release()
+
+
+def run_application(app, instance):
     window = MainWindow()
+    instance.set_activation_handler(window.activate_existing_instance)
+    app.aboutToQuit.connect(instance.release)
     window.show()
     if '--smoke-test' in sys.argv:
         image = QImage(100, 100, QImage.Format.Format_ARGB32)

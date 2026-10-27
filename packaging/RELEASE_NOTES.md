@@ -1,3 +1,10 @@
+## Novidades da versão 0.5.1
+
+- Apenas uma instância do ScreenDepresso por perfil de usuário no Windows e Linux.
+- Abrir o aplicativo novamente restaura a janela existente, inclusive quando estiver na bandeja, preservando a edição atual.
+- Inicializações simultâneas não criam janelas ou atalhos duplicados.
+- Recuperação automática da trava após encerramento forçado ou queda do processo.
+
 ## Novidades da versão 0.5.0
 
 - Suporte a Windows 10/11 x64: capturas, janelas, seleção de região, atalhos globais, bandeja e atualização pelo instalador.

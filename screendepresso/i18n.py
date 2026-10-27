@@ -112,6 +112,11 @@ CATALOG.update({
  '?\nThe app will close to install the update. Save your edits first. Your captures will be preserved.': '?\nO aplicativo será fechado para instalar a atualização. Salve suas edições antes. Suas capturas serão preservadas.',
  'Installer started. The application will now close.': 'Instalador iniciado. O aplicativo será fechado agora.',
 })
+CATALOG.update({
+ 'Could not create the application instance lock.': 'Não foi possível criar a trava de instância do aplicativo.',
+ 'Could not start the application activation channel.': 'Não foi possível iniciar o canal de ativação do aplicativo.',
+ 'ScreenDepresso is already running. Open it from the tray or taskbar.': 'O ScreenDepresso já está em execução. Abra-o pela bandeja ou pela barra de tarefas.',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None
