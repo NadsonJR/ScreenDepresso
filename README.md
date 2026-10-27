@@ -53,6 +53,8 @@ Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Atualizaç
 
 O atualizador consulta releases estáveis e rejeita versões iguais ou anteriores. Requer HTTPS e acesso ao GitHub. O SHA-256 verifica integridade em relação ao manifesto servido pelo GitHub; não é uma assinatura independente do publicador. Nenhuma credencial é incluída no instalador.
 
+O workflow também executa o build automaticamente em pushes relevantes na `main`, além da execução manual. Nessas execuções, o instalador fica disponível nos artefatos do GitHub Actions; a publicação pública continua restrita às tags de versão.
+
 ### Publicar uma nova versão (mantenedores)
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
