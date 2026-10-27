@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.3.1)
+## Instalador e atualizações (v0.4.0)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.3.1_amd64.deb
+sudo apt install ./screendepresso_0.4.0_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.3.1` e `git push origin v0.3.1`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.4.0` e `git push origin v0.4.0`.
 4. O workflow **Build Linux installer** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -105,3 +105,17 @@ Não há popup de texto. A imagem permanece visível durante a edição, e copia
 - **Paste image / Ctrl+V** insere a imagem da área de transferência como uma camada sobre a imagem aberta. Ela pode ser movida, redimensionada, excluída e desfeita/refeita. Imagens grandes são ajustadas ao tamanho da tela de edição; a transparência é preservada. Sem uma imagem aberta, a colagem inicia uma nova imagem.
 - O slider **Blur strength** e o campo numérico aceitam intensidades de **1 a 100**. Selecione o objeto de desfoque e ajuste o controle para modificar um efeito existente. O valor também define a intensidade do próximo efeito. A área selecionada continua nítida.
 - A interface usa **English** por padrão. Em **Settings → Language**, escolha **English** ou **Português (Brasil)** e salve. Menus, ferramentas, configurações e mensagens mudam imediatamente; a preferência é mantida ao reabrir o aplicativo.
+
+## Marcadores numerados e cores (0.4.0)
+
+- Selecione **Numbered markers** (ícone **1**) na barra lateral. Clique para inserir o próximo número ou arraste do centro do círculo até o ponto que deseja indicar. A ferramenta continua ativa para inserir **1, 2, 3…** sem precisar selecioná-la a cada vez.
+- Para ajustar um marcador existente, use **Select / move**: arraste o círculo para reposicioná-lo sem mudar o alvo; arraste a alça na ponta do indicador para apontar para outro objeto. Arrastar o segmento move o conjunto.
+- **Marker color…** altera a cor de todos os marcadores da imagem e dos próximos marcadores. Os números usam contraste claro ou escuro automaticamente.
+- Ao excluir um marcador, os restantes são renumerados sem lacunas. Desfazer/refazer restaura tanto a sequência quanto as mudanças de posição e cor. Uma nova imagem começa em 1.
+- **Rectangle color…** altera o retângulo selecionado e define a cor dos próximos, sem mudar outros retângulos existentes. Se nenhum retângulo estiver selecionado, apenas a cor dos próximos é alterada.
+
+Os controles também estão traduzidos em **Português (Brasil)**. Marcadores e retângulos permanecem objetos editáveis durante a sessão; copiar ou exportar inclui os números, indicadores e cores na imagem final.
+
+### Dicas ao passar o mouse
+
+Mantenha o cursor sobre um botão ou controle para ver o nome da função. As dicas incluem atalhos quando disponíveis, como **Save (Ctrl+S)**, **Paste image (Ctrl+V)** e **Undo (Ctrl+Z)**. Estão disponíveis nas barras superior e lateral, no menu, nos controles de cor e desfoque e nas configurações. As dicas seguem o idioma escolhido em **Settings → Language**.

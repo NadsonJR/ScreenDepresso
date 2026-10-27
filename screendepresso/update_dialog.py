@@ -24,6 +24,7 @@ class UpdateDialog(QDialog):
         self.label.setWordWrap(True)
         layout.addWidget(self.label)
         self.button = QPushButton(tr('Check for updates'))
+        self.button.setToolTip(tr('Check for updates'))
         self.button.clicked.connect(self.perform)
         layout.addWidget(self.button)
         self.completed.connect(self.on_completed)
@@ -60,6 +61,7 @@ class UpdateDialog(QDialog):
             else:
                 self.label.setText(f"{tr('New version: ')}{result.version}\nDownload: {result.size / 1024 / 1024:.1f} MB")
                 self.button.setText(tr('Download and install'))
+                self.button.setToolTip(tr('Download and install'))
         else:
             self.package = Path(result)
             if not Path('/usr/bin/pkexec').exists() or not Path('/usr/bin/apt-get').exists():

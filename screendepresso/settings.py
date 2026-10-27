@@ -73,6 +73,7 @@ class SettingsDialog(QDialog):
         self.shortcuts = {}
         for mode, value in parent.settings.hotkeys.items():
             editor = QKeySequenceEdit(QKeySequence(value))
+            editor.setToolTip(mode_label(mode))
             editor.setMaximumSequenceLength(1)
             self.shortcuts[mode] = editor
             form.addRow(mode_label(mode), editor)
@@ -82,8 +83,10 @@ class SettingsDialog(QDialog):
         files_layout.addWidget(QLabel(tr('Directory for new captures and exports:')))
         row = QHBoxLayout()
         self.directory = QLineEdit(parent.settings.directory)
+        self.directory.setToolTip(tr('Directory for new captures and exports:'))
         row.addWidget(self.directory)
         browse = QPushButton(tr('Browse…'))
+        browse.setToolTip(tr('Capture directory'))
         browse.clicked.connect(self.browse)
         row.addWidget(browse)
         files_layout.addLayout(row)
@@ -94,12 +97,14 @@ class SettingsDialog(QDialog):
         updates = QWidget()
         update_layout = QVBoxLayout(updates)
         button = QPushButton(tr('Check for updates'))
+        button.setToolTip(tr('Check for updates'))
         button.clicked.connect(self.check_updates)
         update_layout.addWidget(button)
         tabs.addTab(updates, tr('Updates'))
         language_page = QWidget()
         language_form = QFormLayout(language_page)
         self.language = QComboBox()
+        self.language.setToolTip(tr('Interface language:'))
         self.language.addItem('English', 'en')
         self.language.addItem('Português (Brasil)', 'pt_BR')
         self.language.setCurrentIndex(self.language.findData(parent.settings.language))
@@ -109,6 +114,10 @@ class SettingsDialog(QDialog):
         language_form.addRow(language_note)
         tabs.addTab(language_page, tr('Language'))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        for button in buttons.buttons():
+            button.setToolTip(button.text().replace('&', ''))
+        for index in range(tabs.count()):
+            tabs.setTabToolTip(index, tabs.tabText(index))
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

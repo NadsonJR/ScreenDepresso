@@ -3,9 +3,9 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize
+from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize, QEvent
 from PySide6.QtGui import QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle, QSpinBox, QSlider, QToolBar, QDockWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolTip
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .settings import Settings, SettingsDialog
@@ -103,6 +103,9 @@ class MainWindow(QMainWindow):
         self.menuBar().addAction(tr('Settings…'), lambda: SettingsDialog(self).exec())
         self.menuBar().addAction(tr('Updates…'), lambda: UpdateDialog(self).exec())
         self.menuBar().addAction(tr('About'), lambda: QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nUbuntu / GNOME / X11'))
+        for action in self.menuBar().actions():
+            action.setToolTip(action.text())
+        self.menuBar().installEventFilter(self)
         self.setPalette(dark_palette())
         self.setStyleSheet(STYLE)
         self.resize(1280, 840)
@@ -121,6 +124,8 @@ class MainWindow(QMainWindow):
         def add_action(bar, title, symbol, callback, color='#3878a8', shortcut=None):
             action = QAction(toolbar_icon(symbol, color), title, self)
             action.triggered.connect(callback)
+            action.setProperty('hoverShortcut', shortcut or '')
+            action.setToolTip(title + (f' ({shortcut})' if shortcut else ''))
             if shortcut:
                 action.setShortcut(QKeySequence(shortcut))
             bar.addAction(action)
@@ -143,7 +148,7 @@ class MainWindow(QMainWindow):
         tools.setMovable(False)
         tools.setIconSize(QSize(40, 40))
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tools)
-        for name, label, symbol in [('selecionar', tr('Select / move'), '↖'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('desfoque', tr('Blur outside selection'), 'blur'), ('recorte', tr('Crop selection'), 'crop')]:
+        for name, label, symbol in [('selecionar', tr('Select / move'), '↖'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('numero', tr('Numbered markers'), '1'), ('desfoque', tr('Blur outside selection'), 'blur'), ('recorte', tr('Crop selection'), 'crop')]:
             action = add_action(tools, label, symbol, lambda checked=False, t=name: self.choose_tool(t))
             action.setCheckable(True)
             self.tool_group.addAction(action)
@@ -161,8 +166,25 @@ class MainWindow(QMainWindow):
         options.setStyleSheet('QWidget#toolOptions { background: #292e38; }')
         options_row = QHBoxLayout(options)
         self.tool_hint = QLabel(tr('Arrow • Drag on the image to draw'))
+        self.tool_hint.setWordWrap(True)
+        self.tool_hint.setMinimumWidth(0)
+        self.tool_hint.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         options_row.addWidget(self.tool_hint, 1)
-        options_row.addWidget(QLabel(tr('Blur strength:')))
+        self.marker_color_button = QPushButton(tr('Marker color…'))
+        self.marker_color_button.setToolTip(tr('Change the color of all markers in this image.'))
+        self.marker_color_button.clicked.connect(self.choose_marker_color)
+        self.canvas.marker_color_changed.connect(self.display_marker_color)
+        self.display_marker_color(self.canvas.marker_color)
+        options_row.addWidget(self.marker_color_button)
+        self.rectangle_color_button = QPushButton(tr('Rectangle color…'))
+        self.rectangle_color_button.setToolTip(tr('Change the selected rectangle and the color of new rectangles.'))
+        self.rectangle_color_button.clicked.connect(self.choose_rectangle_color)
+        self.canvas.rectangle_color_changed.connect(self.display_rectangle_color)
+        self.display_rectangle_color(self.canvas.rectangle_color)
+        options_row.addWidget(self.rectangle_color_button)
+        blur_label = QLabel(tr('Blur strength:'))
+        blur_label.setToolTip(tr('Select a blur effect to change its strength.'))
+        options_row.addWidget(blur_label)
         self.blur_slider = QSlider(Qt.Orientation.Horizontal)
         self.blur_slider.setRange(1, 100)
         self.blur_slider.setValue(14)
@@ -170,6 +192,7 @@ class MainWindow(QMainWindow):
         self.blur_slider.setToolTip(tr('Select a blur effect to change its strength.'))
         options_row.addWidget(self.blur_slider)
         self.blur_strength = QSpinBox()
+        self.blur_strength.setToolTip(tr('Blur strength (1–100)'))
         self.blur_strength.setRange(1, 100)
         self.blur_strength.setValue(14)
         self.blur_strength.valueChanged.connect(self.canvas.set_blur_radius)
@@ -184,6 +207,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.scroll, 1)
         self.setCentralWidget(container)
         self.list = QListWidget()
+        self.list.setToolTip(tr('Click a capture to open it in the editor.'))
         self.list.itemClicked.connect(self.open_history)
         self.history_dock = QDockWidget(tr('Capture history'), self)
         self.history_dock.setObjectName('history')
@@ -194,6 +218,7 @@ class MainWindow(QMainWindow):
         history_action = self.history_dock.toggleViewAction()
         history_action.setIcon(toolbar_icon('☷'))
         history_action.setText(tr('History'))
+        history_action.setToolTip(tr('History'))
         ribbon.addAction(history_action)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
         self.statusBar().addPermanentWidget(self.dimensions)
@@ -217,17 +242,47 @@ class MainWindow(QMainWindow):
         for mode in ['tela', 'janela', 'região']:
             menu.addAction(tr({'tela': 'Capture full screen', 'janela': 'Capture window', 'região': 'Capture region'}[mode]), lambda m=mode: self.capture(m))
         menu.addAction(tr('Quit'), QApplication.quit)
+        menu.setToolTipsVisible(True)
+        for action in menu.actions():
+            action.setToolTip(action.text())
         self.tray.setContextMenu(menu)
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
+
+    def eventFilter(self, watched, event):
+        if watched is self.menuBar() and event.type() == QEvent.Type.ToolTip:
+            action = self.menuBar().actionAt(event.pos())
+            if action is not None:
+                QToolTip.showText(event.globalPos(), action.toolTip(), self.menuBar())
+            return True
+        return super().eventFilter(watched, event)
 
     def choose_tool(self, name):
         self.canvas.tool = name
 
     def sync_tool(self, name):
         self.tool_actions[name].setChecked(True)
-        hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp')}
+        hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp'), 'numero': tr('Numbers • Click for the next number; drag from the circle to its target')}
         self.tool_hint.setText(hints[name])
+        self.tool_hint.setToolTip(hints[name])
+
+    def choose_rectangle_color(self):
+        obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
+        current = obj.get('color', '#ef233c') if obj is not None and obj['kind'] == 'retângulo' else self.canvas.rectangle_color
+        color = QColorDialog.getColor(QColor(current), self, tr('Rectangle color'), QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if color.isValid():
+            self.canvas.set_rectangle_color(color)
+
+    def display_rectangle_color(self, color):
+        self.rectangle_color_button.setIcon(toolbar_icon('rectangle', color))
+
+    def choose_marker_color(self):
+        color = QColorDialog.getColor(QColor(self.canvas.marker_color), self, tr('Marker color'), QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if color.isValid():
+            self.canvas.set_marker_color(color)
+
+    def display_marker_color(self, color):
+        self.marker_color_button.setIcon(toolbar_icon('1', color))
 
     def update_dimensions(self):
         self.dimensions.setText(f'{self.canvas.base.width()} × {self.canvas.base.height()} px • 100%')

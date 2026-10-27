@@ -1,3 +1,14 @@
+## Novidades da versão 0.4.0
+
+- Dicas ao passar o mouse nos botões e controles, com nomes e atalhos traduzidos.
+
+- Marcadores circulares numerados automaticamente em sequência, com indicador e ponto de destino.
+- Clique para inserir; arraste para apontar; use Selecionar para ajustar o círculo e a ponta separadamente.
+- Seletor de cor para todos os marcadores, com contraste automático dos números.
+- Seletor de cor para o retângulo selecionado e os próximos retângulos.
+- Numeração sem lacunas após exclusão, com suporte a desfazer/refazer.
+- Novos controles disponíveis em inglês e português BR.
+
 ## Novidades da versão 0.3.1
 
 - Slider e campo numérico para intensidade do desfoque, de 1 a 100, com edição de efeitos existentes.

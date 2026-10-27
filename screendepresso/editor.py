@@ -3,8 +3,8 @@ from .i18n import tr
 import copy
 import math
 from PIL import Image, ImageFilter
-from PySide6.QtCore import Qt, QPoint, QRect, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont
+from PySide6.QtCore import Qt, QPoint, QPointF, QRect, Signal
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont, QFontMetrics, QLinearGradient
 from PySide6.QtWidgets import QWidget, QPlainTextEdit, QApplication
 
 class InlineTextEdit(QPlainTextEdit):
@@ -27,6 +27,8 @@ class Canvas(QWidget):
     changed = Signal()
     blur_selected = Signal(int)
     tool_changed = Signal(str)
+    marker_color_changed = Signal(str)
+    rectangle_color_changed = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -38,6 +40,8 @@ class Canvas(QWidget):
         self.text_index = None
         self.text_state = None
         self.blur_radius = 14
+        self.marker_color = '#ef233c'
+        self.rectangle_color = '#ef233c'
         self.begin = self.end = None
         self.pending = None
         self.action = None
@@ -54,6 +58,8 @@ class Canvas(QWidget):
         self.finish_text()
         self._tool = value
         self.tool_changed.emit(value)
+        if value == 'retângulo':
+            self.rectangle_color_changed.emit(self.rectangle_color)
         self.setCursor(Qt.CursorShape.ArrowCursor if value == 'selecionar' else Qt.CursorShape.CrossCursor)
 
     @property
@@ -77,11 +83,13 @@ class Canvas(QWidget):
         return {key: QImage(value) if isinstance(value, QImage) else copy.deepcopy(value) for key, value in obj.items()}
 
     def snapshot(self):
-        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects])
+        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color)
 
     def restore(self, state):
         self.finish_text(False)
-        self.base, self.objects = state
+        self.base, self.objects, self.marker_color, self.rectangle_color = state
+        self.rectangle_color_changed.emit(self.rectangle_color)
+        self.marker_color_changed.emit(self.marker_color)
         self.selected = None
         self.pending = self.before = self.begin = self.end = None
         self.setFixedSize(self.base.size())
@@ -114,7 +122,84 @@ class Canvas(QWidget):
 
     @staticmethod
     def object_rect(obj):
-        return QRect(QPoint(*obj['a']), QPoint(*obj['b'])).normalized()
+        rect = QRect(QPoint(*obj['a']), QPoint(*obj['b'])).normalized()
+        return rect.adjusted(-22, -22, 22, 22) if obj['kind'] == 'numero' else rect
+
+    @staticmethod
+    def hit_test(obj, point):
+        if obj['kind'] != 'numero':
+            return Canvas.object_rect(obj).adjusted(-6, -6, 6, 6).contains(point)
+        a, b = QPointF(*obj['a']), QPointF(*obj['b'])
+        px, py = point.x(), point.y()
+        if math.hypot(px-a.x(), py-a.y()) <= 24:
+            return True
+        dx, dy = b.x()-a.x(), b.y()-a.y()
+        length = dx*dx + dy*dy
+        t = max(0, min(1, ((px-a.x())*dx+(py-a.y())*dy)/length)) if length else 0
+        return math.hypot(px-a.x()-t*dx, py-a.y()-t*dy) <= 8
+
+    def renumber_markers(self):
+        number = 1
+        for obj in self.objects:
+            if obj['kind'] == 'numero':
+                obj['number'] = number
+                number += 1
+
+    def set_rectangle_color(self, color):
+        self.finish_text()
+        color = QColor(color)
+        if not color.isValid():
+            return
+        obj = self.objects[self.selected] if self.selected is not None else None
+        name = color.name()
+        if name == self.rectangle_color and (obj is None or obj['kind'] != 'retângulo' or obj.get('color', '#ef233c') == name):
+            return
+        before = self.snapshot()
+        self.rectangle_color = name
+        if obj is not None and obj['kind'] == 'retângulo':
+            obj['color'] = name
+        self.rectangle_color_changed.emit(name)
+        self.commit(before)
+
+    def set_marker_color(self, color):
+        self.finish_text()
+        color = QColor(color)
+        if not color.isValid() or color.name() == self.marker_color:
+            return
+        before = self.snapshot()
+        self.marker_color = color.name()
+        self.marker_color_changed.emit(self.marker_color)
+        self.commit(before)
+
+    def draw_marker(self, painter, obj):
+        center, target = QPointF(*obj['a']), QPointF(*obj['b'])
+        color = QColor(self.marker_color)
+        painter.setPen(QPen(color, 2.5))
+        painter.drawLine(center, target)
+        painter.setBrush(color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(target, 5, 5)
+        painter.setBrush(QColor(0, 0, 0, 45))
+        painter.drawEllipse(center+QPointF(1, 2), 21, 21)
+        gradient = QLinearGradient(center.x(), center.y()-20, center.x(), center.y()+20)
+        gradient.setColorAt(0, color.lighter(120))
+        gradient.setColorAt(1, color.darker(110))
+        painter.setBrush(gradient)
+        painter.setPen(QPen(color.darker(120), 1))
+        painter.drawEllipse(center, 20, 20)
+        font = QFont()
+        font.setBold(True)
+        size = 23
+        number = str(obj['number'])
+        while size > 6:
+            font.setPixelSize(size)
+            if QFontMetrics(font).horizontalAdvance(number) <= 30:
+                break
+            size -= 1
+        painter.setFont(font)
+        luminance = (299*color.red()+587*color.green()+114*color.blue())/1000
+        painter.setPen(QColor('#111827') if luminance > 155 else QColor('white'))
+        painter.drawText(QRect(round(center.x())-19, round(center.y())-20, 39, 40), Qt.AlignmentFlag.AlignCenter, number)
 
     def draw_object(self, image, obj):
         rect = self.object_rect(obj)
@@ -132,7 +217,9 @@ class Canvas(QWidget):
         p = QPainter(image)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(QPen(QColor('#ef233c'), 4))
-        if obj['kind'] == 'imagem':
+        if obj['kind'] == 'numero':
+            self.draw_marker(p, obj)
+        elif obj['kind'] == 'imagem':
             p.drawImage(rect, obj['image'])
         elif obj['kind'] == 'seta':
             a, b = (QPoint(*obj['a']), QPoint(*obj['b']))
@@ -141,6 +228,7 @@ class Canvas(QWidget):
             for offset in (-0.5, 0.5):
                 p.drawLine(b, QPoint(round(b.x() - 20 * math.cos(angle + offset)), round(b.y() - 20 * math.sin(angle + offset))))
         elif obj['kind'] == 'retângulo':
+            p.setPen(QPen(QColor(obj.get('color', '#ef233c')), 4))
             p.drawRect(rect.adjusted(2, 2, -2, -2))
         elif obj['kind'] == 'texto':
             font = QFont()
@@ -169,9 +257,13 @@ class Canvas(QWidget):
             p.drawRect(self.object_rect(self.pending))
         if self.selected is not None and self.selected < len(self.objects):
             obj = self.objects[self.selected]
-            p.drawRect(self.object_rect(obj))
+            if obj['kind'] == 'numero':
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawEllipse(QPointF(*obj['a']), 23, 23)
+            else:
+                p.drawRect(self.object_rect(obj))
             p.setBrush(QColor('white'))
-            for key in ('a', 'b'):
+            for key in (('b',) if obj['kind'] == 'numero' else ('a', 'b')):
                 point = QPoint(*obj[key])
                 p.drawRect(QRect(point - QPoint(5, 5), point + QPoint(5, 5)))
 
@@ -183,22 +275,31 @@ class Canvas(QWidget):
         self.begin = self.end = point
         self.before = self.snapshot()
         self.action = None
-        if self.tool == 'selecionar':
+        selected_marker = self.objects[self.selected] if self.selected is not None else None
+        adjust_marker = self.tool == 'numero' and selected_marker is not None and selected_marker['kind'] == 'numero' and (math.hypot(point.x()-selected_marker['a'][0], point.y()-selected_marker['a'][1]) <= 24 or (point-QPoint(*selected_marker['b'])).manhattanLength() <= 12)
+        if self.tool == 'selecionar' or adjust_marker:
             if self.selected is not None:
                 obj = self.objects[self.selected]
-                for key in ('a', 'b'):
+                for key in (('b',) if obj['kind'] == 'numero' else ('a', 'b')):
                     if (point - QPoint(*obj[key])).manhattanLength() <= 12:
                         self.action = key
                         return
-            self.selected = next((i for i in reversed(range(len(self.objects))) if self.object_rect(self.objects[i]).adjusted(-6, -6, 6, 6).contains(point)), None)
+            self.selected = next((i for i in reversed(range(len(self.objects))) if self.hit_test(self.objects[i], point)), None)
             if self.selected is not None:
-                self.action = 'move'
+                obj = self.objects[self.selected]
+                self.action = 'marker_center' if obj['kind'] == 'numero' and math.hypot(point.x()-obj['a'][0], point.y()-obj['a'][1]) <= 24 else 'move'
+                if obj['kind'] == 'retângulo':
+                    self.rectangle_color_changed.emit(obj.get('color', '#ef233c'))
                 if self.objects[self.selected]['kind'] == 'desfoque':
                     self.blur_selected.emit(self.objects[self.selected]['radius'])
             self.update()
             return
         self.selected = None
         self.pending = {'kind': self.tool, 'a': [point.x(), point.y()], 'b': [point.x(), point.y()], 'radius': self.blur_radius}
+        if self.tool == 'retângulo':
+            self.pending['color'] = self.rectangle_color
+        if self.tool == 'numero':
+            self.pending['number'] = 1 + sum(obj['kind'] == 'numero' for obj in self.objects)
 
     def mouseMoveEvent(self, event):
         if self.begin is None:
@@ -210,7 +311,11 @@ class Canvas(QWidget):
             self.pending['b'] = [point.x(), point.y()]
         elif self.action and self.selected is not None:
             obj = self.objects[self.selected]
-            if self.action == 'move':
+            if self.action == 'marker_center':
+                old = self.before[1][self.selected]
+                delta = point-self.begin
+                obj['a'] = [max(0, min(self.base.width()-1, old['a'][0]+delta.x())), max(0, min(self.base.height()-1, old['a'][1]+delta.y()))]
+            elif self.action == 'move':
                 old = self.before[1][self.selected]
                 delta = point - self.begin
                 dx = max(-min(old['a'][0], old['b'][0]), min(delta.x(), self.base.width() - 1 - max(old['a'][0], old['b'][0])))
@@ -239,7 +344,7 @@ class Canvas(QWidget):
             return
         if self.pending:
             rect = self.object_rect(self.pending).intersected(self.base.rect())
-            if self.pending['kind'] == 'seta' and (self.end - self.begin).manhattanLength() > 3 or (rect.width() > 2 and rect.height() > 2):
+            if self.pending['kind'] == 'numero' or (self.pending['kind'] == 'seta' and (self.end - self.begin).manhattanLength() > 3) or (rect.width() > 2 and rect.height() > 2):
                 if self.pending['kind'] == 'recorte':
                     self.base = self.base.copy(rect)
                     for obj in self.objects:
@@ -247,9 +352,12 @@ class Canvas(QWidget):
                             obj[key] = [obj[key][0] - rect.x(), obj[key][1] - rect.y()]
                     self.setFixedSize(self.base.size())
                 else:
+                    if self.pending['kind'] == 'numero' and (self.end-self.begin).manhattanLength() < 4:
+                        a = self.pending['a']
+                        self.pending['b'] = [max(0, min(self.base.width()-1, a[0]+(36 if a[0]+36 < self.base.width() else -36))), max(0, min(self.base.height()-1, a[1]+(36 if a[1]+36 < self.base.height() else -36)))]
                     self.objects.append(self.clone_object(self.pending))
                     self.selected = len(self.objects) - 1
-                    self.tool = 'selecionar'
+                    self.tool = 'numero' if self.pending['kind'] == 'numero' else 'selecionar'
                 changed = True
         elif self.action and self.objects != self.before[1]:
             changed = True
@@ -330,6 +438,7 @@ class Canvas(QWidget):
         if self.selected is not None:
             before = self.snapshot()
             del self.objects[self.selected]
+            self.renumber_markers()
             self.selected = None
             self.commit(before)
 

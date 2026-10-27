@@ -1,7 +1,7 @@
 """English is the default; preferences select English or Brazilian Portuguese."""
 from PySide6.QtCore import QTranslator
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QLabel, QAbstractButton, QLineEdit, QPlainTextEdit, QTabWidget, QDockWidget, QToolBar
+from PySide6.QtWidgets import QWidget, QApplication, QLabel, QAbstractButton, QLineEdit, QPlainTextEdit, QTabWidget, QDockWidget, QToolBar
 
 # English source strings and their Brazilian Portuguese translations.
 CATALOG = {
@@ -75,6 +75,25 @@ CATALOG = {
  'Show ': 'Mostrar ', 'All Files (*)': 'Todos os arquivos (*)', 'Choose': 'Escolher',
 }
 CATALOG.update({'Capture full screen': 'Capturar tela inteira', 'Capture window': 'Capturar janela', 'Capture region': 'Capturar região', 'Unsupported language': 'Idioma não suportado'})
+CATALOG.update({
+ 'Blur strength (1–100)': 'Intensidade do desfoque (1–100)',
+ 'Click a capture to open it in the editor.': 'Clique em uma captura para abri-la no editor.',
+ 'Rectangle color…': 'Cor do retângulo…',
+ 'Rectangle color': 'Cor do retângulo',
+ 'Change the selected rectangle and the color of new rectangles.': 'Altere o retângulo selecionado e a cor dos novos retângulos.',
+ 'Numbered markers': 'Marcadores numerados',
+ 'Marker color…': 'Cor dos marcadores…',
+ 'Marker color': 'Cor dos marcadores',
+ 'Change the color of all markers in this image.': 'Altere a cor de todos os marcadores desta imagem.',
+ 'Numbers • Click for the next number; drag from the circle to its target': 'Números • Clique para o próximo número; arraste do círculo até o alvo',
+ 'Basic colors': 'Cores básicas', '&Basic colors': '&Cores básicas',
+ 'Custom colors': 'Cores personalizadas', '&Custom colors': 'Cores &personalizadas',
+ '&Add to Custom Colors': '&Adicionar às cores personalizadas',
+ '&Pick Screen Color': '&Capturar cor da tela', 'Select Color': 'Selecionar cor',
+ 'Hu&e:': '&Matiz:', '&Sat:': '&Saturação:', '&Val:': '&Valor:',
+ '&Red:': '&Vermelho:', '&Green:': '&Verde:', 'Bl&ue:': '&Azul:',
+ 'A&lpha channel:': 'Canal a&lfa:', 'HTML:': 'HTML:',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None
@@ -102,7 +121,11 @@ def translate_tree(root):
     for widget in [root] + root.findChildren(QAction) + root.findChildren(QLabel) + root.findChildren(QAbstractButton):
         if hasattr(widget, 'text') and hasattr(widget, 'setText'):
             widget.setText(tr(widget.text()))
-        if hasattr(widget, 'toolTip'):
+    for widget in [root] + root.findChildren(QWidget) + root.findChildren(QAction):
+        shortcut = widget.property('hoverShortcut')
+        if shortcut is not None:
+            widget.setToolTip(widget.text() + (f' ({shortcut})' if shortcut else ''))
+        else:
             widget.setToolTip(tr(widget.toolTip()))
     for widget in [root] + root.findChildren(QDockWidget) + root.findChildren(QToolBar):
         if isinstance(widget, (QDockWidget, QToolBar)):
@@ -110,6 +133,7 @@ def translate_tree(root):
     for tabs in root.findChildren(QTabWidget):
         for index in range(tabs.count()):
             tabs.setTabText(index, tr(tabs.tabText(index)))
+            tabs.setTabToolTip(index, tr(tabs.tabToolTip(index)))
 
 
 def set_language(language):
