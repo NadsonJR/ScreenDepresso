@@ -15,7 +15,7 @@ RUN --mount=type=secret,id=environment_ca \
 ENV UV_NATIVE_TLS=true PIP_CERT=/etc/ssl/certs/ca-certificates.crt
 RUN python3 -m venv /tools && /tools/bin/pip install --no-cache-dir uv==0.12.23
 ENV PATH="/tools/bin:${PATH}"
-RUN apt-get update -o APT::Update::Error-Mode=any && apt-get install -y --no-install-recommends libgssapi-krb5-2 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -o APT::Update::Error-Mode=any && apt-get install -y --no-install-recommends libgssapi-krb5-2 xvfb && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY . .
 RUN uv sync --frozen --extra dev --extra build \

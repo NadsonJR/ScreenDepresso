@@ -1,3 +1,13 @@
+## Novidades da versão 0.3.0
+
+- Ctrl+Z para desfazer e Ctrl+Y para refazer.
+- Configurações com abas de hotkeys, diretório de arquivos e verificação de atualizações.
+- Prévia real de seta durante o arraste.
+- Objetos editáveis: selecionar, mover, redimensionar, excluir e editar o texto por duplo clique.
+- Desfoque fora da região selecionada, com intensidade ajustável de 1 a 100.
+
+As anotações são editáveis durante a sessão de edição. Exportações e imagens reabertas do histórico são rasterizadas. Alterar o diretório não move capturas antigas.
+
 ## Instalação no Ubuntu 24.04 ou mais recente (x86_64 / X11)
 
 Baixe o arquivo `screendepresso_*_amd64.deb` abaixo. Abra-o no instalador de aplicativos do Ubuntu ou execute:

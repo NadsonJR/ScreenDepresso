@@ -1,17 +1,17 @@
-import json
 import os
-import signal
 import sys
-import threading
 from datetime import datetime
 from pathlib import Path
 
-from PIL import Image, ImageFilter
 from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject
-from PySide6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QKeySequence, QAction, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QMessageBox,
-    QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle)
+    QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QStyle, QSpinBox)
+
+from .editor import Canvas
+from .settings import Settings, SettingsDialog
+from .hotkeys import Hotkeys
 
 
 class History:
@@ -27,102 +27,6 @@ class History:
 
     def entries(self):
         return sorted(self.directory.glob('*.png'), reverse=True)
-
-
-class Canvas(QWidget):
-    changed = Signal()
-
-    def __init__(self):
-        super().__init__()
-        self.image = QImage()
-        self.tool = 'seta'
-        self.begin = None
-        self.end = None
-        self.undo_stack = []
-        self.setMouseTracking(True)
-
-    def load(self, image):
-        self.image = image.convertToFormat(QImage.Format.Format_ARGB32)
-        self.undo_stack.clear()
-        self.resize(self.image.size())
-        self.setFixedSize(self.image.size())
-        self.update()
-
-    def undo(self):
-        if self.undo_stack:
-            self.image = self.undo_stack.pop()
-            self.setFixedSize(self.image.size())
-            self.update()
-            self.changed.emit()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.drawImage(0, 0, self.image)
-        if self.begin is not None and self.end is not None:
-            painter.setPen(QPen(QColor('#f43f5e'), 2, Qt.PenStyle.DashLine))
-            painter.drawRect(QRect(self.begin, self.end).normalized())
-
-    def mousePressEvent(self, event):
-        if event.button() != Qt.MouseButton.LeftButton or self.image.isNull():
-            return
-        self.begin = event.position().toPoint()
-        self.end = self.begin
-        if self.tool == 'texto':
-            text, ok = QInputDialog.getText(self, 'Texto', 'Texto da anotação:')
-            if ok and text:
-                self.undo_stack.append(self.image.copy())
-                painter = QPainter(self.image)
-                painter.setPen(QColor('#ef233c'))
-                font = painter.font()
-                font.setPixelSize(24)
-                font.setBold(True)
-                painter.setFont(font)
-                painter.drawText(self.begin, text)
-                painter.end()
-                self.changed.emit()
-            self.begin = self.end = None
-            self.update()
-
-    def mouseMoveEvent(self, event):
-        if self.begin is not None:
-            self.end = event.position().toPoint()
-            self.update()
-
-    def mouseReleaseEvent(self, event):
-        if self.begin is None or event.button() != Qt.MouseButton.LeftButton:
-            return
-        end = event.position().toPoint()
-        rect = QRect(self.begin, end).normalized().intersected(self.image.rect())
-        if rect.width() > 2 and rect.height() > 2:
-            self.undo_stack.append(self.image.copy())
-            if self.tool == 'recorte':
-                self.image = self.image.copy(rect)
-                self.setFixedSize(self.image.size())
-            elif self.tool == 'desfoque':
-                part = self.image.copy(rect).convertToFormat(QImage.Format.Format_RGBA8888)
-                pil = Image.frombytes('RGBA', (part.width(), part.height()), bytes(part.bits()), 'raw', 'RGBA', part.bytesPerLine())
-                data = pil.filter(ImageFilter.GaussianBlur(14)).tobytes()
-                blurred = QImage(data, part.width(), part.height(), part.width() * 4, QImage.Format.Format_RGBA8888).copy()
-                painter = QPainter(self.image)
-                painter.drawImage(rect.topLeft(), blurred)
-                painter.end()
-            else:
-                painter = QPainter(self.image)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                painter.setPen(QPen(QColor('#ef233c'), 4))
-                if self.tool == 'retângulo':
-                    painter.drawRect(rect.adjusted(2, 2, -2, -2))
-                else:
-                    import math
-                    painter.drawLine(self.begin, end)
-                    angle = math.atan2(end.y() - self.begin.y(), end.x() - self.begin.x())
-                    for offset in (-0.5, 0.5):
-                        tip = QPoint(round(end.x() - 20 * math.cos(angle + offset)), round(end.y() - 20 * math.sin(angle + offset)))
-                        painter.drawLine(end, tip)
-                painter.end()
-            self.changed.emit()
-        self.begin = self.end = None
-        self.update()
 
 
 class Selector(QWidget):
@@ -170,40 +74,6 @@ class Selector(QWidget):
             self.cancelled.emit()
 
 
-class Hotkeys(QObject):
-    capture = Signal(str)
-    failed = Signal(str)
-
-    def run(self):
-        try:
-            from Xlib import X, XK, display, error
-            connection = display.Display()
-            root = connection.screen().root
-            bindings = {}
-            errors = []
-            def on_error(err, request):
-                errors.append(str(err))
-            connection.set_error_handler(on_error)
-            for key, mode in [('1', 'tela'), ('2', 'janela'), ('3', 'região')]:
-                code = connection.keysym_to_keycode(XK.string_to_keysym(key))
-                bindings[code] = mode
-                for locks in (0, X.LockMask, X.Mod2Mask, X.LockMask | X.Mod2Mask):
-                    root.grab_key(code, X.ControlMask | X.ShiftMask | locks, False, X.GrabModeAsync, X.GrabModeAsync)
-            connection.sync()
-            if errors:
-                root.ungrab_key(X.AnyKey, X.AnyModifier)
-                connection.sync()
-                self.failed.emit('Atalhos ocupados por outro aplicativo. Use os botões de captura.')
-                connection.close()
-                return
-            while True:
-                event = connection.next_event()
-                if event.type == X.KeyPress and event.detail in bindings:
-                    self.capture.emit(bindings[event.detail])
-        except Exception as exc:
-            self.failed.emit(f'Atalhos indisponíveis: {exc}')
-
-
 def windows():
     from Xlib import X, display
     connection = display.Display()
@@ -231,11 +101,13 @@ class MainWindow(QMainWindow):
         super().__init__()
         from . import __version__
         from .update_dialog import UpdateDialog
+        self.settings = Settings()
         self.setWindowTitle('ScreenDepresso')
+        self.menuBar().addAction('Configurações…', lambda: SettingsDialog(self).exec())
         self.menuBar().addAction('Atualizações…', lambda: UpdateDialog(self).exec())
         self.menuBar().addAction('Sobre', lambda: QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nUbuntu / GNOME / X11'))
         self.resize(1100, 760)
-        self.history = History()
+        self.history = History(self.settings.directory)
         self.canvas = Canvas()
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -246,15 +118,30 @@ class MainWindow(QMainWindow):
             capture_row.addWidget(button)
         layout.addLayout(capture_row)
         tools = QHBoxLayout()
-        for name in ['seta', 'texto', 'retângulo', 'desfoque', 'recorte']:
+        for name in ['selecionar', 'seta', 'texto', 'retângulo', 'desfoque', 'recorte']:
             button = QPushButton(name.capitalize())
             button.clicked.connect(lambda checked=False, t=name: setattr(self.canvas, 'tool', t))
             tools.addWidget(button)
-        for label, callback in [('Desfazer', self.canvas.undo), ('Copiar', self.copy), ('Salvar', self.save)]:
+        for label, callback in [('Desfazer', self.canvas.undo), ('Refazer', self.canvas.redo), ('Copiar', self.copy), ('Salvar', self.save)]:
             button = QPushButton(label)
             button.clicked.connect(callback)
             tools.addWidget(button)
         layout.addLayout(tools)
+        blur_row = QHBoxLayout()
+        blur_row.addWidget(QLabel('Desfoque fora da seleção:'))
+        self.blur_strength = QSpinBox()
+        self.blur_strength.setRange(1, 100)
+        self.blur_strength.setValue(14)
+        self.blur_strength.valueChanged.connect(self.canvas.set_blur_radius)
+        self.canvas.blur_selected.connect(self.display_blur_radius)
+        blur_row.addWidget(self.blur_strength)
+        blur_row.addWidget(QLabel('Selecionar: mover e arrastar alças • Texto: duplo clique para editar'))
+        layout.addLayout(blur_row)
+        for label, shortcut, callback in [('Desfazer', 'Ctrl+Z', self.canvas.undo), ('Refazer', 'Ctrl+Y', self.canvas.redo), ('Excluir objeto', 'Delete', self.canvas.delete_selected)]:
+            action = QAction(label, self)
+            action.setShortcut(QKeySequence(shortcut))
+            action.triggered.connect(callback)
+            self.addAction(action)
         body = QHBoxLayout()
         self.list = QListWidget()
         self.list.setMaximumWidth(240)
@@ -266,12 +153,16 @@ class MainWindow(QMainWindow):
         layout.addLayout(body)
         self.setCentralWidget(container)
         self.refresh()
-        self.statusBar().showMessage('Ctrl+Shift+1: tela • Ctrl+Shift+2: janela • Ctrl+Shift+3: região')
         self.hotkeys = Hotkeys()
         self.hotkeys.capture.connect(self.capture)
         self.hotkeys.failed.connect(lambda message: self.statusBar().showMessage(message))
-        if os.environ.get('DISPLAY'):
-            threading.Thread(target=self.hotkeys.run, daemon=True).start()
+        QApplication.instance().aboutToQuit.connect(self.hotkeys.stop)
+        self.show_shortcuts()
+        if os.environ.get('DISPLAY') and '--smoke-test' not in sys.argv:
+            try:
+                self.hotkeys.configure(self.settings.hotkeys)
+            except Exception as exc:
+                self.statusBar().showMessage(f'Atalhos indisponíveis: {exc}')
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         self.setWindowIcon(icon)
         self.tray = QSystemTrayIcon(icon, self)
@@ -283,6 +174,29 @@ class MainWindow(QMainWindow):
         self.tray.setContextMenu(menu)
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
+
+    def display_blur_radius(self, radius):
+        self.blur_strength.blockSignals(True)
+        self.blur_strength.setValue(radius)
+        self.blur_strength.blockSignals(False)
+
+    def show_shortcuts(self):
+        self.statusBar().showMessage(' • '.join(f'{value}: {mode}' for mode, value in self.settings.hotkeys.items()))
+
+    def apply_settings(self, directory, hotkeys):
+        old = self.settings.hotkeys.copy()
+        changed = hotkeys != old
+        if changed and os.environ.get('DISPLAY'):
+            self.hotkeys.configure(hotkeys)
+        try:
+            self.settings.save(directory, hotkeys)
+        except OSError:
+            if changed and os.environ.get('DISPLAY'):
+                self.hotkeys.configure(old)
+            raise
+        self.history = History(directory)
+        self.refresh()
+        self.show_shortcuts()
 
     def refresh(self):
         self.list.clear()
@@ -351,7 +265,7 @@ class MainWindow(QMainWindow):
     def save(self):
         if self.canvas.image.isNull():
             return
-        path, _ = QFileDialog.getSaveFileName(self, 'Salvar imagem', 'captura.png', 'PNG (*.png);;JPEG (*.jpg *.jpeg)')
+        path, _ = QFileDialog.getSaveFileName(self, 'Salvar imagem', str(self.history.directory / 'captura.png'), 'PNG (*.png);;JPEG (*.jpg *.jpeg)')
         if path:
             if not Path(path).suffix:
                 path += '.png'
