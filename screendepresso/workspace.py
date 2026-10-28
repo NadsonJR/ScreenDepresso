@@ -8,7 +8,7 @@ from send2trash import send2trash
 from PySide6.QtCore import (Qt, QSize, QTimer, QFile, QMimeData, QUrl,
                             QFileSystemWatcher, QByteArray, QBuffer, QIODevice, Signal, QEvent)
 from PySide6.QtGui import QIcon, QImage, QImageReader, QDrag, QPixmap
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QToolButton, QLabel, QMenu,
                                QListWidget, QListWidgetItem, QListView, QAbstractItemView)
 from .i18n import tr
 from .appearance import icon
@@ -184,17 +184,17 @@ class WorkspaceView(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         actions = QHBoxLayout()
-        self.duplicate_button = QPushButton()
-        self.delete_button = QPushButton()
-        self.refresh_button = QPushButton()
-        self.duplicate_button.clicked.connect(self.duplicate_selected)
-        self.delete_button.clicked.connect(self.delete_selected)
+        actions.addStretch()
+        self.refresh_button = QToolButton()
+        self.refresh_button.setAutoRaise(True)
+        self.refresh_button.setIcon(icon('refresh', 'transparent'))
+        self.refresh_button.setIconSize(QSize(22, 22))
         self.refresh_button.clicked.connect(self.refresh)
-        for button in (self.duplicate_button, self.delete_button, self.refresh_button):
-            actions.addWidget(button)
+        actions.addWidget(self.refresh_button)
         layout.addLayout(actions)
         self.grid = WorkspaceGrid(self)
-        self.grid.itemSelectionChanged.connect(self.sync_actions)
+        self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.grid.customContextMenuRequested.connect(self.show_context_menu)
         self.grid.delete_requested.connect(self.delete_selected)
         self.grid.duplicate_requested.connect(self.duplicate_selected)
         layout.addWidget(self.grid, 1)
@@ -233,10 +233,26 @@ class WorkspaceView(QWidget):
         item = self.grid.currentItem()
         return Path(item.data(Qt.ItemDataRole.UserRole)) if item is not None else None
 
-    def sync_actions(self):
-        selected = self.grid.currentItem() is not None
-        self.delete_button.setEnabled(selected)
-        self.duplicate_button.setEnabled(selected)
+    def context_menu(self, position):
+        item = self.grid.itemAt(position)
+        if item is None:
+            return None
+        self.grid.setCurrentItem(item)
+        path = self.selected_path()
+        menu = QMenu(self)
+        duplicate = menu.addAction(tr('Duplicate'))
+        duplicate.setToolTip(tr('Duplicate selected image (Ctrl+D)'))
+        duplicate.triggered.connect(lambda: self.duplicate_selected(path))
+        delete = menu.addAction(tr('Delete'))
+        delete.setToolTip(tr('Move selected image to the system trash (Delete)'))
+        delete.triggered.connect(lambda: self.delete_selected(path))
+        return menu
+
+    def show_context_menu(self, position):
+        menu = self.context_menu(position)
+        if menu is not None:
+            menu.exec(self.grid.viewport().mapToGlobal(position))
+            menu.deleteLater()
 
     def refresh(self, select=None):
         if self._stopped:
@@ -274,7 +290,6 @@ class WorkspaceView(QWidget):
             self.watcher.removePaths(watched)
         if entries:
             self.watcher.addPaths([str(path) for path in entries])
-        self.sync_actions()
         self.retranslate()
         if self._pending:
             self._loader.start(0)
@@ -299,8 +314,8 @@ class WorkspaceView(QWidget):
         if not self._pending:
             self._loader.stop()
 
-    def duplicate_selected(self):
-        path = self.selected_path()
+    def duplicate_selected(self, path=None):
+        path = path if path is not None else self.selected_path()
         if path is None:
             return
         try:
@@ -311,8 +326,8 @@ class WorkspaceView(QWidget):
             self._message = ('Could not duplicate the image: {details}', {'details': str(exc)})
             self.retranslate()
 
-    def delete_selected(self):
-        path = self.selected_path()
+    def delete_selected(self, path=None):
+        path = path if path is not None else self.selected_path()
         if path is None:
             return
         try:
@@ -324,13 +339,8 @@ class WorkspaceView(QWidget):
             self.retranslate()
 
     def retranslate(self):
-        for button, text, tip in [
-            (self.duplicate_button, 'Duplicate', 'Duplicate selected image (Ctrl+D)'),
-            (self.delete_button, 'Delete', 'Move selected image to the system trash (Delete)'),
-            (self.refresh_button, 'Refresh', 'Refresh workspace thumbnails'),
-        ]:
-            button.setText(tr(text))
-            button.setToolTip(tr(tip))
+        self.refresh_button.setToolTip(tr('Refresh workspace thumbnails'))
+        self.refresh_button.setAccessibleName(tr('Refresh'))
         self.grid.setToolTip(tr('Double-click to open an image. Drag a thumbnail onto the editor to add it as an editable image.'))
         for index in range(self.grid.count()):
             item = self.grid.item(index)

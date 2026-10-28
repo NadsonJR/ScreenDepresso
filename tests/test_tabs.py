@@ -202,3 +202,60 @@ def test_tab_preserves_scroll_position_and_annotation_colors(window):
     assert a.arrow_color == '#0000ff'
     assert a.rectangle_color == '#008000'
     assert a.marker_color == '#ffff00'
+
+
+@pytest.mark.parametrize('action,remaining', [(0, 0), (1, 2), (2, 1)])
+def test_tab_context_actions_target_clicked_tab_after_reordering(window, action, remaining):
+    for _ in range(3):
+        window.finish_capture(image())
+    tabs = window.tabs
+    target = tabs.widget(0)
+    tabs.setCurrentIndex(2)
+    menu = tabs.context_menu(tabs.tabBar().tabRect(0).center())
+    assert [a.text() for a in menu.actions()] == ['Close all tabs', 'Close this tab', 'Close other tabs']
+    tabs.tabBar().moveTab(0, 1)
+    menu.actions()[action].trigger()
+    assert sum(not tabs.widget(i).widget().base.isNull() for i in range(tabs.count())) == remaining
+    if action == 1:
+        assert tabs.indexOf(target) == -1
+    elif action == 2:
+        assert tabs.currentWidget() is target
+    else:
+        assert tabs.count() == 1 and tabs.canvas.base.isNull()
+        assert tabs.tabBar().isHidden()
+    assert len(window.history.entries()) == 3  # Closing tabs never deletes saved captures.
+
+
+def test_close_all_stops_on_cancel_after_closing_an_earlier_tab(window, monkeypatch):
+    window.finish_capture(image())
+    clean = window.tabs.currentWidget()
+    a, b = capture_pair(window)
+    dirty = window.tabs.widget(1)
+    last = window.tabs.widget(2)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Cancel)
+    window.close_tabs('all', clean)
+    assert window.tabs.count() == 2
+    assert window.tabs.currentWidget() is dirty
+    assert window.tabs.indexOf(last) >= 0
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Discard)
+
+
+def test_close_other_tabs_aborts_when_save_is_cancelled(window, monkeypatch):
+    a, b = capture_pair(window)
+    target = window.tabs.currentWidget()
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Save)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args: ('', ''))
+    window.close_tabs('others', target)
+    assert window.tabs.count() == 2 and window.canvas is a
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Discard)
+
+
+def test_tab_context_menu_ignores_empty_space_and_translates(window):
+    from PySide6.QtCore import QPoint
+    window.finish_capture(image())
+    tabs = window.tabs
+    assert tabs.context_menu(QPoint(-10, -10)) is None
+    set_language('pt_BR')
+    menu = tabs.context_menu(tabs.tabBar().tabRect(0).center())
+    assert [a.text() for a in menu.actions()] == ['Fechar todas as abas', 'Fechar essa aba', 'Fechar outras abas']
+    assert not menu.actions()[2].isEnabled()

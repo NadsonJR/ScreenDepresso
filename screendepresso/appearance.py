@@ -50,7 +50,11 @@ def icon(symbol, color='#3878a8'):
     p.setBrush(QColor(color))
     p.drawRoundedRect(QRectF(2, 2, 44, 44), 7, 7)
     p.setPen(QPen(QColor('#f8fafc'), 2.5))
-    if symbol == 'save':
+    if symbol == 'refresh':
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(11, 11, 26, 26), 40*16, 285*16)
+        p.drawPolyline([QPointF(27, 10), QPointF(35, 13), QPointF(34, 22)])
+    elif symbol == 'save':
         path = QPainterPath()
         path.moveTo(12, 10)
         path.lineTo(30, 10)

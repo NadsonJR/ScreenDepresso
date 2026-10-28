@@ -151,11 +151,13 @@ def test_workspace_thumbnails_duplicate_delete_and_open_tabs_are_preserved(windo
     pump(lambda:not window.workspace._pending)
     assert not window.list.item(0).icon().isNull()
     select_path(window,original)
-    window.workspace.duplicate_button.click()
+    menu=window.workspace.context_menu(window.list.visualItemRect(window.list.currentItem()).center())
+    menu.actions()[0].trigger()
     duplicate=window.workspace.selected_path()
     assert duplicate and duplicate!=original and duplicate.read_bytes()==original.read_bytes()
     assert window.tabs.count()==1
-    window.workspace.delete_button.click()
+    menu=window.workspace.context_menu(window.list.visualItemRect(window.list.currentItem()).center())
+    menu.actions()[1].trigger()
     assert duplicate in trash and not duplicate.exists()
     assert window.canvas.image==image('white',160,120)
     assert window.tabs.count()==1
@@ -268,3 +270,35 @@ def test_settings_utf8_and_legacy_windows_encoding_preserve_directory(tmp_path,m
     monkeypatch.setattr(settings_module.locale,'getpreferredencoding',lambda *args:'cp1252')
     assert Settings(settings.path).directory==legacy
     assert Settings(settings.path).workspace_limit==25
+
+
+def test_context_menu_uses_clicked_thumbnail_and_keeps_target_after_refresh(window, trash):
+    from PySide6.QtWidgets import QPushButton, QToolButton
+    first = window.history.save(image('red'))
+    second = window.history.save(image('blue'))
+    window.refresh()
+    pump(lambda: not window.workspace._pending)
+    item = select_path(window, first)
+    point = window.list.visualItemRect(item).center()
+    select_path(window, second)
+    menu = window.workspace.context_menu(point)
+    assert window.workspace.selected_path() == first
+    assert [a.text() for a in menu.actions()] == ['Duplicate', 'Delete']
+    window.workspace.refresh(select=second)
+    menu.actions()[1].trigger()
+    assert first in trash and second.exists()
+    assert window.workspace.findChildren(QPushButton) == []
+    assert isinstance(window.workspace.refresh_button, QToolButton)
+    assert not window.workspace.refresh_button.text()
+    assert not window.workspace.refresh_button.icon().isNull()
+    set_language('pt_BR')
+    item = select_path(window, second)
+    menu = window.workspace.context_menu(window.list.visualItemRect(item).center())
+    assert [a.text() for a in menu.actions()] == ['Duplicar', 'Excluir']
+    assert window.workspace.refresh_button.toolTip() == 'Atualizar miniaturas do workspace'
+    window.workspace.refresh_button.click()
+    assert second.exists()
+
+
+def test_workspace_empty_space_has_no_image_actions(window):
+    assert window.workspace.context_menu(QPoint(-10, -10)) is None

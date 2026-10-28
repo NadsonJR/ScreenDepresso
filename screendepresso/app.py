@@ -244,6 +244,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.version_label)
         self.tabs.currentChanged.connect(self.tab_changed)
         self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.tabs.close_requested.connect(self.close_tabs)
         for label, shortcut, callback in [
             ('Close tab', 'Ctrl+W', lambda: self.close_tab(self.tabs.currentIndex())),
             ('Next tab', 'Ctrl+Tab', lambda: self.tabs.cycle(1)),
@@ -350,8 +351,8 @@ class MainWindow(QMainWindow):
         self.tabs.retranslate()
 
     def close_tab(self, index):
-        if index < 0:
-            return
+        if index < 0 or index >= self.tabs.count():
+            return False
         self.tabs.setCurrentIndex(index)
         self.canvas.finish_text()
         if self.tabs.is_dirty(self.tabs.currentWidget()):
@@ -360,12 +361,28 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Save)
             if answer == QMessageBox.StandardButton.Cancel:
-                return
+                return False
             if answer == QMessageBox.StandardButton.Save and not self.save():
-                return
+                return False
         # Clear the reference before Qt destroys the closed canvas.
         self._active_canvas = None
         self.tabs.remove_document(index)
+        return True
+
+    def close_tabs(self, operation, page):
+        if self.tabs.indexOf(page) < 0 or operation not in ('all', 'this', 'others'):
+            return
+        pages = [self.tabs.widget(i) for i in range(self.tabs.count())]
+        if operation == 'this':
+            pages = [page]
+        elif operation == 'others':
+            pages.remove(page)
+        for target in pages:
+            if not self.close_tab(self.tabs.indexOf(target)):
+                break
+        else:
+            if operation == 'others':
+                self.tabs.setCurrentWidget(page)
 
     def activate_existing_instance(self):
         self.open_editor()
@@ -933,6 +950,11 @@ def run_application(app, instance):
         QApplication.processEvents()
         if settings.tabs.currentWidget() is not window.update_panel or not window.update_panel.button.isVisible():
             raise RuntimeError('Inline updates panel smoke test failed')
+        window.update_panel.notes_button.click()
+        from . import __version__
+        if not window.update_panel.notes_view.isVisible() or __version__ not in window.update_panel.notes_view.toPlainText():
+            raise RuntimeError('Installed release notes smoke test failed')
+        window.update_panel.notes_button.click()
         from . import i18n
         set_language('pt_BR')
         if i18n._translator.native.isEmpty() or settings.workspace_limit.itemText(4) != 'Sem limite':

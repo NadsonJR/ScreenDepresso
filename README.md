@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.6.6)
+## Instalador e atualizações (v0.6.7)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.6.6_amd64.deb
+sudo apt install ./screendepresso_0.6.7_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Settings → Updates → Check for updates → Download and install**. Todo o fluxo acontece na própria aba, com a opção de manter a versão atual. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições e use **Restart application** ao concluir a atualização. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.6` e `git push origin v0.6.6`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.7` e `git push origin v0.6.7`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.6.6_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.6.7_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -244,3 +244,11 @@ Em **Settings → Files**, escolha **25** (padrão), **50**, **75**, **100** ou 
 Diretórios existentes não são reduzidos apenas ao iniciar ou atualizar o aplicativo: se já excederem o limite, o painel informa que ele será aplicado no próximo salvamento. Para preservar todos os arquivos no diretório, selecione **No limit** antes de salvar novas imagens. Se a lixeira estiver indisponível, os arquivos são preservados e o painel informa que não foi possível aplicar o limite. Não há fallback para exclusão permanente.
 
 A interface inclui traduções revisadas em inglês e português BR, com o catálogo brasileiro do Qt incluído nos instaladores para diálogos de arquivos e menus de contexto. Trocar o idioma atualiza os controles, status e placeholders sem traduzir nomes de arquivos, fontes nem o conteúdo escrito nas imagens. Quantidades decimais usam o formato do idioma selecionado. Mensagens externas do sistema operacional continuam sujeitas ao idioma do sistema.
+
+## Menus de contexto e notas de atualização (0.6.7)
+
+Clique com o botão direito em uma aba para **Close all tabs**, **Close this tab** ou **Close other tabs**. A ação usa a aba clicada, mesmo quando outra está ativa. Abas com edições não salvas mantêm as opções de salvar, descartar ou cancelar. Cancelar interrompe o fechamento das abas restantes; abas já fechadas continuam fechadas. Fechar todas retorna ao editor vazio, sem abas visíveis, preservando os arquivos no Workspace.
+
+No **Workspace**, clique com o botão direito na miniatura para **Duplicate** ou **Delete**. Os três botões superiores foram substituídos por um ícone de atualização no canto superior direito. **Ctrl+D**, **Delete**, atualização automática e arraste para o editor continuam disponíveis. Excluir ainda move para a lixeira do sistema.
+
+Em **Settings → Updates**, clique em **Release notes** para expandir as notas da versão instalada na própria aba. As notas acompanham o aplicativo, funcionam offline e seguem o idioma escolhido. Uma versão nova disponível não substitui essas notas pelas da versão ainda não instalada.

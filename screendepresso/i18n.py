@@ -206,6 +206,19 @@ CATALOG.update({
  '&Rename': '&Renomear', '&Delete': 'E&xcluir', 'Show Date Modified': 'Mostrar data de modificação',
  'Show Size': 'Mostrar tamanho', 'Show Type': 'Mostrar tipo',
 })
+CATALOG.update({
+ 'Close all tabs': 'Fechar todas as abas',
+ 'Close this tab': 'Fechar essa aba',
+ 'Close other tabs': 'Fechar outras abas',
+ 'Release notes': 'Notas de atualização',
+ 'Read release notes for the installed version': 'Ler notas de atualização da versão instalada',
+ 'What’s new in version {version}': 'Novidades da versão {version}',
+ 'Right-click an image tab to close all tabs, only that tab, or all other tabs.': 'Clique com o botão direito em uma aba de imagem para fechar todas as abas, somente essa aba ou as outras abas.',
+ 'Tabs with unsaved edits still offer Save, Discard and Cancel. Cancel stops closing the remaining tabs.': 'Abas com edições não salvas continuam oferecendo Salvar, Descartar e Cancelar. Cancelar interrompe o fechamento das abas restantes.',
+ 'Right-click a workspace thumbnail to duplicate it or move it to the system trash. Keyboard shortcuts and dragging images into the editor are preserved.': 'Clique com o botão direito em uma miniatura do workspace para duplicá-la ou movê-la para a lixeira do sistema. Os atalhos de teclado e o arraste de imagens para o editor foram preservados.',
+ 'Refresh workspace thumbnails using the icon in the upper-right corner.': 'Atualize as miniaturas do workspace pelo ícone no canto superior direito.',
+ 'Read the installed version’s release notes in Settings → Updates, even without an internet connection.': 'Leia as notas da versão instalada em Configurações → Atualizações, mesmo sem conexão com a internet.',
+})
 REVERSE = {}
 for english, translated in CATALOG.items():
     REVERSE.setdefault(translated, english)

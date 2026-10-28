@@ -49,7 +49,8 @@ def test_check_replaces_button_with_loader_and_latest_restores_check_button(dial
         dialog.perform()
         assert dialog.phase == 'checking' and dialog.busy
         assert dialog.loader.isVisible()
-        assert not any(b.isVisible() for b in dialog.findChildren(QPushButton))
+        assert not dialog.button.isVisible() and not dialog.keep_button.isVisible()
+        assert dialog.notes_button.isVisible()
     finally:
         gate.set()
     pump(lambda: not dialog.busy)

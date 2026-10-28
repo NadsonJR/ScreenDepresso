@@ -1,8 +1,8 @@
 """Open captures keep independent canvases, edit history and scroll positions."""
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QPointF
-from PySide6.QtWidgets import QScrollArea, QTabWidget
+from PySide6.QtCore import Qt, QPointF, Signal
+from PySide6.QtWidgets import QScrollArea, QTabWidget, QMenu
 
 from .editor import Canvas
 from .i18n import tr
@@ -60,6 +60,8 @@ class CaptureScrollArea(QScrollArea):
 
 
 class CaptureTabs(QTabWidget):
+    close_requested = Signal(str, object)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('captureTabs')
@@ -69,8 +71,31 @@ class CaptureTabs(QTabWidget):
         self.setUsesScrollButtons(True)
         self.tabBar().setExpanding(False)
         self.tabBar().setElideMode(Qt.TextElideMode.ElideMiddle)
+        self.tabBar().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tabBar().customContextMenuRequested.connect(self.show_context_menu)
         self.next_number = 1
         self.add_document()
+
+    def context_menu(self, position):
+        index = self.tabBar().tabAt(position)
+        if index < 0:
+            return None
+        # Keep the page identity: indices change when tabs are closed or moved.
+        page = self.widget(index)
+        menu = QMenu(self)
+        for text, operation in ((tr('Close all tabs'), 'all'),
+                                (tr('Close this tab'), 'this'),
+                                (tr('Close other tabs'), 'others')):
+            action = menu.addAction(text)
+            action.triggered.connect(lambda checked=False, op=operation: self.close_requested.emit(op, page))
+        menu.actions()[2].setEnabled(self.count() > 1)
+        return menu
+
+    def show_context_menu(self, position):
+        menu = self.context_menu(position)
+        if menu is not None:
+            menu.exec(self.tabBar().mapToGlobal(position))
+            menu.deleteLater()
 
     @property
     def canvas(self):

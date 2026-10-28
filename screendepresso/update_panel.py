@@ -4,9 +4,10 @@ import shutil
 import threading
 from pathlib import Path
 from PySide6.QtCore import QProcess, QProcessEnvironment, Qt, Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QStackedWidget, QSizePolicy
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QStackedWidget, QSizePolicy, QTextBrowser
 from . import __version__
 from .i18n import tr, format_number
+from .release_notes import installed_release_notes
 from .updater import (check_update, download_release, system_environment,
                       start_windows_installer, start_restarted_application)
 
@@ -54,6 +55,15 @@ class UpdatePanel(QWidget):
         actions.addWidget(self.keep_button)
         actions.addStretch()
         layout.addLayout(actions)
+        self.notes_button = QPushButton()
+        self.notes_button.setCheckable(True)
+        layout.addWidget(self.notes_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.notes_view = QTextBrowser()
+        self.notes_view.setOpenExternalLinks(False)
+        self.notes_view.setMinimumHeight(180)
+        self.notes_view.hide()
+        self.notes_button.toggled.connect(self.notes_view.setVisible)
+        layout.addWidget(self.notes_view)
         layout.addStretch()
         self.completed.connect(self.on_completed)
         self.failed.connect(self.on_failed)
@@ -61,6 +71,12 @@ class UpdatePanel(QWidget):
         self.render()
 
     def render(self):
+        self.notes_button.setText(tr('Release notes'))
+        self.notes_button.setToolTip(tr('Read release notes for the installed version'))
+        self.notes_view.setAccessibleName(tr('Release notes'))
+        notes = installed_release_notes()
+        if self.notes_view.toPlainText() != notes:
+            self.notes_view.setPlainText(notes)
         installed = f"{tr('Installed version: ')}{__version__}"
         if self.phase == 'checking':
             text = installed+'\n'+tr('Checking published versions on GitHub…')

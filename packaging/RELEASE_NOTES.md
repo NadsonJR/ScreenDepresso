@@ -1,3 +1,11 @@
+## Novidades da versão 0.6.7
+
+- Clique direito nas abas: **Fechar todas as abas**, **Fechar essa aba** e **Fechar outras abas**, atuando sobre a aba clicada mesmo quando ela não está ativa.
+- Edições não salvas continuam oferecendo salvar, descartar ou cancelar. Cancelar interrompe o fechamento das abas restantes; fechar abas não exclui arquivos do workspace.
+- Ações **Duplicar** e **Excluir** movidas para o menu de clique direito nas miniaturas do Workspace. Atalhos de teclado e arraste para o editor preservados.
+- Atualização manual das miniaturas por um ícone de refresh sem botão retangular, no canto superior direito do Workspace.
+- Botão **Notas de atualização** em **Configurações → Atualizações**, com notas da versão instalada na própria aba, disponíveis offline em inglês e português BR.
+
 ## Novidades da versão 0.6.6
 
 - Histórico substituído por **Workspace**, com miniaturas do diretório, atualização automática e ações de duplicar e excluir.
