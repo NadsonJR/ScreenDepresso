@@ -149,6 +149,7 @@ def test_capture_hides_modeless_settings_and_keeps_update_state(window, monkeypa
     settings = window.open_settings(updates=True)
     window.update_panel.on_completed('check',release())
     monkeypatch.setattr(app_module.QTimer,'singleShot',lambda *args: None)
+    monkeypatch.setattr('screendepresso.macos_backend.ensure_screen_permission', lambda: None)
     window.capture('tela')
     assert not settings.isVisible()
     assert window.update_panel.phase == 'available'
