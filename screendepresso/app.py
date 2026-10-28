@@ -260,6 +260,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(zoom_panel, 0)
         self.tool_hint.setWordWrap(False)
         self.statusBar().addPermanentWidget(self.tool_hint, 1)
+        self.statusBar().messageChanged.connect(self.status_message_changed)
         self.statusBar().addPermanentWidget(self.dimensions)
         from . import __version__
         self.version_label = QLabel(f'v{__version__}')
@@ -521,6 +522,7 @@ class MainWindow(QMainWindow):
             event.ignore()
 
     def choose_tool(self, name):
+        self.statusBar().clearMessage()
         self.canvas.tool = name
 
     def setup_bubble_menu(self, tools):
@@ -734,8 +736,15 @@ class MainWindow(QMainWindow):
         from .i18n import REVERSE
         source = REVERSE.get(hints[name], hints[name])
         self.tool_hint.setProperty('helpSource', source)
-        self.tool_hint.setText(native_help(source))
-        self.tool_hint.setToolTip(native_help(source))
+        self.status_message_changed(self.statusBar().currentMessage())
+
+    def status_message_changed(self, message):
+        # Permanent zoom/dimension widgets leave little room for Qt's temporary
+        # message paint area. Reuse the contextual label so feedback is visible.
+        self.tool_hint.setProperty('statusMessage', message)
+        text = tr(message) if message else native_help(self.tool_hint.property('helpSource') or '')
+        self.tool_hint.setText(text)
+        self.tool_hint.setToolTip(text)
 
     def choose_arrow_color(self):
         obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
@@ -934,14 +943,14 @@ class MainWindow(QMainWindow):
 
     def paste(self):
         if not self.canvas.paste_image():
-            self.statusBar().showMessage(tr('Clipboard does not contain an image.'))
+            self.statusBar().showMessage(tr('Clipboard does not contain an image.'), 4000)
         self.update_dimensions()
 
     def copy(self):
         self.canvas.finish_text()
         if not self.canvas.image.isNull():
             QApplication.clipboard().setImage(self.canvas.image)
-            self.statusBar().showMessage(tr('Image copied. Keep the application open to provide clipboard data.'))
+            self.statusBar().showMessage(tr('Image copied. Keep the application open to provide clipboard data.'), 4000)
 
     def save(self):
         self.canvas.finish_text()

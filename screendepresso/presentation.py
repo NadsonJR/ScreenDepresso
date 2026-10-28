@@ -183,6 +183,10 @@ class ContextBar(QScrollArea):
 
     @staticmethod
     def set_value(control, value):
+        current = (control.currentData() if isinstance(control, QComboBox) else
+                   control.isChecked() if isinstance(control, QCheckBox) else control.value())
+        if current == value:
+            return
         with QSignalBlocker(control):
             if isinstance(control, QComboBox):
                 control.setCurrentIndex(control.findData(value))
@@ -212,7 +216,9 @@ class ContextBar(QScrollArea):
         for combo, choices in self.combos:
             with QSignalBlocker(combo):
                 for index, text in enumerate(choices.values()):
-                    combo.setItemText(index, tr(text))
+                    translated = tr(text)
+                    if combo.itemText(index) != translated:
+                        combo.setItemText(index, translated)
         for label, text in self.hints:
             label.setText(tr(text))
         self.rounded.setText(tr('Rounded corners'))
@@ -226,10 +232,11 @@ class ContextBar(QScrollArea):
         self.set_value(self.radius, rectangle.get('radius', 12))
         self.radius.setEnabled(self.rounded.isChecked())
         self.set_value(self.font_size, text.get('font_size', 24))
-        with QSignalBlocker(self.font):
-            font = self.font.currentFont()
+        font = self.font.currentFont()
+        if font.family() != text['font_family']:
             font.setFamily(text['font_family'])
-            self.font.setCurrentFont(font)
+            with QSignalBlocker(self.font):
+                self.font.setCurrentFont(font)
         self.set_value(self.bubble_style, bubble.get('style','oval'))
         self.set_value(self.marker_style, self.owner.current_marker_style())
         self.set_value(self.blur_strength, selected['radius'] if selected and selected['kind'] == 'desfoque' else canvas.blur_radius)
@@ -245,9 +252,13 @@ class ContextBar(QScrollArea):
 
     @staticmethod
     def swatch(button, color):
+        color = QColor(color).name()
+        if button.property('swatchColor') == color:
+            return
+        button.setProperty('swatchColor', color)
         pixmap = QPixmap(40,40)
         pixmap.fill(QColor(color))
         pixmap.setDevicePixelRatio(2)
         button.setIcon(QIcon(pixmap))
-        button.setText(QColor(color).name().upper())
-        button.setAccessibleDescription(QColor(color).name())
+        button.setText(color.upper())
+        button.setAccessibleDescription(color)

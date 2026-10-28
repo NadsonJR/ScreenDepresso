@@ -309,9 +309,11 @@ def translate_tree(root):
         shortcut = widget.property('hoverShortcut')
         help_source = widget.property('helpSource')
         if help_source:
-            widget.setToolTip(native_help(help_source))
+            message = widget.property('statusMessage')
+            text = tr(message) if message else native_help(help_source)
+            widget.setToolTip(text)
             if isinstance(widget, QLabel):
-                widget.setText(native_help(help_source))
+                widget.setText(text)
         elif shortcut is not None:
             widget.setToolTip(widget.text() + (f' ({QKeySequence(shortcut).toString(QKeySequence.SequenceFormat.NativeText)})' if shortcut else ''))
         else:

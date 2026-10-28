@@ -144,3 +144,17 @@ def test_identity_text_and_active_buttons_have_aa_contrast():
     for foreground,background in [('text','surface'),('secondary','canvas'),('text','accent_active')]:
         assert contrast(TOKENS[foreground],TOKENS[background]) >= 4.5
     assert '@' not in stylesheet()
+
+
+def test_action_feedback_is_visible_beside_zoom_and_restores_context(window):
+    window.tabs.open_image(image())
+    window.update_dimensions()
+    window.copy()
+    assert window.tool_hint.isVisible()
+    assert 'Image copied.' in window.tool_hint.text()
+    assert window.tool_hint.toolTip() == window.tool_hint.text()
+    assert window.zoom_slider.isVisible() and window.version_label.isVisible()
+    set_language('pt_BR')
+    assert 'Imagem copiada.' in window.tool_hint.text()
+    window.statusBar().clearMessage()
+    assert window.tool_hint.text().startswith('Seta')
