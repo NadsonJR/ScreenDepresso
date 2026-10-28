@@ -18,6 +18,9 @@ from .update_panel import UpdatePanel
 from .workspace import WorkspaceStore as History, WorkspaceView, read_image
 
 def windows():
+    if sys.platform == 'darwin':
+        from .macos_backend import windows as list_windows
+        return list_windows()
     if sys.platform == 'win32':
         from .windows_backend import windows as list_windows
         return list_windows(with_ids=True)
@@ -52,6 +55,9 @@ def windows():
         connection.close()
 
 def activate_window(wid):
+    if sys.platform == 'darwin':
+        from .macos_backend import activate_window as activate
+        return activate(wid)
     if sys.platform == 'win32':
         from .windows_backend import activate_window as activate
         return activate(wid)
@@ -420,7 +426,7 @@ class MainWindow(QMainWindow):
 
     def show_about(self):
         from . import __version__
-        QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nWindows / Linux X11')
+        QMessageBox.information(self, 'ScreenDepresso', f'ScreenDepresso {__version__}\nWindows / Linux X11 / macOS')
 
     def ask_close_action(self):
         from .close_dialog import CloseDialog
@@ -801,6 +807,13 @@ class MainWindow(QMainWindow):
     def capture(self, mode, screen_name=None):
         if self._quitting or self._capture_pending:
             return
+        if sys.platform == 'darwin':
+            from .macos_backend import ensure_screen_permission
+            try:
+                ensure_screen_permission()
+            except RuntimeError as exc:
+                QMessageBox.warning(self, tr('Capture error'), str(exc))
+                return
         self.canvas.finish_text()
         self._capture_pending = True
         if self._settings_dialog is not None:
@@ -852,6 +865,10 @@ class MainWindow(QMainWindow):
                 self.selector.show()
                 return
             if target is not None:
+                if sys.platform == 'darwin':
+                    from .macos_backend import capture_window
+                    self.finish_capture(capture_window(target[2]))
+                    return
                 pixmap = crop_desktop(pixmap, geometry, target[1])
             self.finish_capture(pixmap.toImage())
         except Exception as exc:

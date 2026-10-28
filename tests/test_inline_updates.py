@@ -163,7 +163,7 @@ def test_installed_release_notes_stay_inline_offline_and_translate(window, monke
     panel.notes_button.click()
     assert panel.notes_view.isVisible()
     assert __version__ in panel.notes_view.toPlainText()
-    assert 'Right-click an image tab' in panel.notes_view.toPlainText()
+    assert 'Update controls appear side by side' in panel.notes_view.toPlainText()
     # The notes describe the installed version, even when an update is offered.
     offered = Release('99.0.0', 'package.exe', 'https://github.com/package.exe', 'a'*64, 100)
     panel.on_completed('check', offered)
@@ -172,9 +172,23 @@ def test_installed_release_notes_stay_inline_offline_and_translate(window, monke
     window.apply_settings(window.settings.directory, window.settings.hotkeys, 'pt_BR')
     assert panel.notes_button.text() == 'Notas de atualização'
     assert f'Novidades da versão {__version__}' in panel.notes_view.toPlainText()
-    assert 'Clique com o botão direito' in panel.notes_view.toPlainText()
+    assert 'Os controles de atualização ficam lado a lado' in panel.notes_view.toPlainText()
     settings.reject()
     window.open_settings(updates=True)
     assert panel.notes_view.isVisible()
     panel.notes_button.click()
     assert panel.notes_view.isHidden()
+
+
+def test_updates_buttons_share_one_row_and_version_is_centered(window):
+    from PySide6.QtCore import Qt
+    settings = window.open_settings(updates=True)
+    panel = window.update_panel
+    app.processEvents()
+    assert panel.label.alignment() == Qt.AlignmentFlag.AlignCenter
+    assert panel.action_stack.geometry().center().y() == panel.notes_button.geometry().center().y()
+    panel.on_completed('check', release())
+    app.processEvents()
+    assert panel.keep_button.isVisible()
+    assert panel.action_stack.geometry().center().y() == panel.keep_button.geometry().center().y()
+    assert panel.keep_button.geometry().center().y() == panel.notes_button.geometry().center().y()

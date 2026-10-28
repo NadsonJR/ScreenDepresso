@@ -129,7 +129,7 @@ def test_region_overlay_uses_whole_screen_not_work_area(monkeypatch):
         assert overlay.geometry() == geometry
         assert overlay.image.size() == image.size()
         assert overlay.image.pixelColor(399,299) == QColor('red')
-        if os.name != 'nt':
+        if platform.sys.platform.startswith('linux'):
             assert overlay.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
         for kind, point, button in [(QEvent.Type.MouseButtonPress,QPoint(0,0),Qt.MouseButton.LeftButton),
                                      (QEvent.Type.MouseMove,QPoint(399,299),Qt.MouseButton.NoButton),
@@ -212,6 +212,7 @@ def test_window_capture_uses_preview_choice_and_refreshes_window_geometry(window
     monkeypatch.setattr(application,'windows',lambda: [target])
     calls = []
     monkeypatch.setattr(application,'activate_window',lambda wid: calls.append(wid))
+    monkeypatch.setattr('screendepresso.macos_backend.capture_window', lambda wid: image.copy(20, 10, 60, 80))
     monkeypatch.setattr(application.QTimer,'singleShot',lambda milliseconds,callback: callback())
     class Picker:
         DialogCode = QDialog.DialogCode

@@ -600,7 +600,6 @@ class Canvas(QWidget):
                         self.pending['b'] = [max(0, min(self.base.width()-1, a[0]+(36 if a[0]+36 < self.base.width() else -36))), max(0, min(self.base.height()-1, a[1]+(36 if a[1]+36 < self.base.height() else -36)))]
                     self.objects.append(self.clone_object(self.pending))
                     self.selected = len(self.objects) - 1
-                    self.tool = 'numero' if self.pending['kind'] == 'numero' else 'selecionar'
                 changed = True
         elif self.action and self.objects != self.before[1]:
             if self.objects[self.selected]['kind'] == 'texto':
@@ -671,13 +670,13 @@ class Canvas(QWidget):
                 self.selected = index
             if self.objects != before[1]:
                 self.commit(before)
-        self._tool = 'selecionar'
-        self.tool_changed.emit('selecionar')
-        self.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.setCursor(Qt.CursorShape.OpenHandCursor if self.tool == 'selecionar' else Qt.CursorShape.CrossCursor)
         self.sync_size()
         self.update()
 
     def mouseDoubleClickEvent(self, event):
+        if self.tool != 'selecionar':
+            return
         point = self.image_point(event)
         index = next((i for i in reversed(range(len(self.objects))) if self.objects[i]['kind'] == 'texto' and self.object_rect(self.objects[i]).contains(point)), None)
         if index is not None:

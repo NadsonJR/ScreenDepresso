@@ -127,8 +127,70 @@ jobs:
             dist/WINDOWS-SHA256SUMS
           if-no-files-found: error
 
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: amd64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --extra build
+      - name: Validate architecture, tag and macOS tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          uv run --frozen python -c "import os, platform; assert ('arm64' if platform.machine() == 'arm64' else 'amd64') == os.environ['EXPECTED_ARCH']"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "$GITHUB_REF_NAME" = "v$(uv run --frozen python -c 'from screendepresso import __version__; print(__version__)')"
+          fi
+          set +e
+          uv run --frozen pytest -q --junitxml=macos-tests.xml
+          test_exit=$?
+          set -e
+          if [ "$test_exit" -ne 0 ]; then
+            uv run --frozen python packaging/report_tests.py macos-tests.xml macOS
+          fi
+          exit "$test_exit"
+      - name: Build macOS application and disk image
+        run: uv run --frozen python packaging/build_macos.py
+      - name: Mount, install and smoke-test macOS application
+        run: |
+          mount="$RUNNER_TEMP/screendepresso-dmg"
+          installed="$RUNNER_TEMP/screendepresso-installed/ScreenDepresso.app"
+          mkdir -p "$mount" "$(dirname "$installed")"
+          hdiutil attach dist/*.dmg -mountpoint "$mount" -nobrowse -readonly
+          trap 'hdiutil detach "$mount"' EXIT
+          ditto "$mount/ScreenDepresso.app" "$installed"
+          codesign --verify --deep --strict "$installed"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/screendepresso-config"
+          export XDG_DATA_HOME="$RUNNER_TEMP/screendepresso-data"
+          export SCREENDEPRESSO_TEST_EXE="$installed/Contents/MacOS/ScreenDepresso"
+          uv run --frozen python -c "import os, subprocess; subprocess.run([os.environ['SCREENDEPRESSO_TEST_EXE'], '--smoke-test'], check=True, timeout=45)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screendepresso-macos-${{ matrix.arch }}
+          path: |
+            dist/*.dmg
+            dist/macos-update.json
+            dist/MACOS-SHA256SUMS
+          if-no-files-found: error
+
   publish:
-    needs: [build, windows]
+    needs: [build, windows, macos]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:
@@ -146,11 +208,19 @@ jobs:
         with:
           name: screendepresso-windows-amd64
           path: dist/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: screendepresso-macos-arm64
+          path: dist/macos-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: screendepresso-macos-amd64
+          path: dist/macos-amd64
       - name: Verify installers and merge update metadata
-        run: python packaging/merge_release.py dist/linux dist/windows dist/release
-      - name: Publish Linux and Windows installers
+        run: python packaging/merge_release.py dist/linux dist/windows dist/release dist/macos-arm64 dist/macos-amd64
+      - name: Publish Linux, Windows and macOS installers
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/linux/*.deb dist/windows/*_setup.exe dist/release/update.json dist/release/SHA256SUMS --repo "$GH_REPO" --verify-tag --title "ScreenDepresso $GITHUB_REF_NAME" --notes-file packaging/RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" dist/linux/*.deb dist/windows/*_setup.exe dist/macos-arm64/*.dmg dist/macos-amd64/*.dmg dist/release/update.json dist/release/SHA256SUMS --repo "$GH_REPO" --verify-tag --title "ScreenDepresso $GITHUB_REF_NAME" --notes-file packaging/RELEASE_NOTES.md

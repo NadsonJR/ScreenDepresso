@@ -90,6 +90,7 @@ def test_resize_move_delete_with_undo_redo():
     canvas = Canvas()
     canvas.load(image())
     drag(canvas, 'retângulo')
+    canvas.tool = 'selecionar'
     gesture(canvas, (100, 80), (140, 100))
     assert canvas.objects[0]['b'] == [140, 100]
     canvas.undo()
@@ -162,6 +163,7 @@ def test_text_content_edit():
     assert canvas.objects[0]['text'] == 'Primeiro'
     assert canvas.image != image()
     assert canvas.base == image()
+    canvas.tool = 'selecionar'
     QTest.mouseDClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(30, 25))
     assert canvas.text_editor is not None
     canvas.text_editor.setPlainText('Editado')
@@ -230,7 +232,8 @@ def test_typing_text_and_clicking_outside_confirms_without_popup():
     assert editor.toPlainText() == 'Texto digitado'
     # Canvas click commits text as a single document operation.
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(155, 110))
-    assert canvas.text_editor is None
+    assert canvas.text_editor is not None  # Ready to enter the next text object.
+    canvas.finish_text(False)
     assert canvas.objects[0]['text'] == 'Texto digitado'
     assert len(canvas.undo_stack) == 1
     assert canvas.image != image()

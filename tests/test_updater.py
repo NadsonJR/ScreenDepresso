@@ -79,6 +79,7 @@ def test_restore_system_environment(monkeypatch):
 def test_check_update_reads_manifest(monkeypatch):
     import json
     monkeypatch.setattr(updater.platform, 'system', lambda: 'Linux')
+    monkeypatch.setattr(updater.platform, 'machine', lambda: 'x86_64')
     monkeypatch.setattr(updater, 'open_url', lambda url: io.BytesIO(json.dumps(manifest()).encode()))
     assert updater.check_update('0.2.0').version == '0.3.0'
 

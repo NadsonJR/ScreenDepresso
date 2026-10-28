@@ -51,11 +51,17 @@ class Release:
         if version_tuple(version) <= version_tuple(current_version):
             return None
         system = system or platform.system()
-        if (machine or platform.machine()).lower() not in ('x86_64', 'amd64') or system not in ('Linux', 'Windows'):
-            raise ValueError(tr('Updates are only available for Windows and Linux x86_64.'))
-        windows = system == 'Windows'
-        filename = f'screendepresso_{version}_windows_amd64_setup.exe' if windows else f'screendepresso_{version}_amd64.deb'
-        package = data.get('windows-amd64' if windows else 'linux-amd64', {})
+        machine = (machine or platform.machine()).lower()
+        if system == 'Darwin' and machine in ('arm64', 'aarch64', 'x86_64', 'amd64'):
+            arch = 'arm64' if machine in ('arm64', 'aarch64') else 'amd64'
+            filename = f'screendepresso_{version}_macos_{arch}.dmg'
+            key = 'macos-'+arch
+        elif system in ('Linux', 'Windows') and machine in ('x86_64', 'amd64'):
+            filename = f'screendepresso_{version}_windows_amd64_setup.exe' if system == 'Windows' else f'screendepresso_{version}_amd64.deb'
+            key = 'windows-amd64' if system == 'Windows' else 'linux-amd64'
+        else:
+            raise ValueError(tr('Updates support Windows/Linux x86_64 and macOS Intel/Apple Silicon.'))
+        package = data.get(key, {})
         url = f'https://github.com/{REPOSITORY}/releases/download/v{version}/{filename}'
         if package.get('url') != url:
             raise ValueError(tr('Invalid package source.'))
@@ -109,7 +115,17 @@ def system_environment():
         env.pop('LD_LIBRARY_PATH', None)
     for name in ('QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH', 'QML2_IMPORT_PATH'):
         env.pop(name, None)
+    for name in tuple(env):
+        if name.startswith('DYLD_'):
+            env.pop(name, None)
     return env
+
+
+def start_macos_installer(path):
+    """Open the verified disk image; the user replaces the application in Finder."""
+    import subprocess
+    return subprocess.run(['/usr/bin/open', str(path)], env=system_environment(),
+                          check=True, timeout=15)
 
 
 def start_windows_installer(path, restart=False):

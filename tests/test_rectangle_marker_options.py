@@ -68,6 +68,7 @@ def test_rectangle_style_is_in_live_preview_and_survives_resize_at_zoom():
     preview = canvas.render_image(True)
     QTest.mouseRelease(canvas,Qt.MouseButton.LeftButton,pos=QPoint(285,195))
     assert canvas.image == preview
+    canvas.tool = 'selecionar'
     gesture(canvas,(285,195),(330,225))
     obj = canvas.objects[0]
     assert obj['b'] == [220,150]

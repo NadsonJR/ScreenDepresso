@@ -7,7 +7,7 @@ from .i18n import tr
 
 
 def global_hotkeys_available():
-    return sys.platform == 'win32' or bool(os.environ.get('DISPLAY'))
+    return sys.platform in ('win32', 'darwin') or bool(os.environ.get('DISPLAY'))
 
 
 def config_path():
@@ -15,6 +15,8 @@ def config_path():
         return Path(os.environ['XDG_CONFIG_HOME'])/'screendepresso/settings.json'
     if sys.platform == 'win32':
         return Path(os.environ.get('LOCALAPPDATA', Path.home()/'AppData/Local'))/'ScreenDepresso/settings.json'
+    if sys.platform == 'darwin':
+        return Path.home()/'Library/Application Support/ScreenDepresso/settings.json'
     return Path.home()/'.config/screendepresso/settings.json'
 
 
@@ -23,6 +25,8 @@ def data_directory():
         return Path(os.environ['XDG_DATA_HOME'])/'screendepresso'
     if sys.platform == 'win32':
         return Path(os.environ.get('LOCALAPPDATA', Path.home()/'AppData/Local'))/'ScreenDepresso/captures'
+    if sys.platform == 'darwin':
+        return Path.home()/'Library/Application Support/ScreenDepresso/captures'
     return Path.home()/'.local/share/screendepresso'
 
 

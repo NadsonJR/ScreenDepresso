@@ -85,7 +85,7 @@ def test_ribbon_tools_and_copy_commit_inline_text(tmp_path, monkeypatch):
     assert window.canvas.objects[0]['text'] == 'Na imagem'
     assert QApplication.clipboard().image() == window.canvas.image
     assert window.canvas.image != image()
-    assert window.tool_actions['selecionar'].isChecked()
+    assert window.tool_actions['texto'].isChecked()
     assert window.findChild(QToolBar, 'tools').orientation() == Qt.Orientation.Vertical
     assert window.findChild(QToolBar, 'ribbon') is not None
     window.close()

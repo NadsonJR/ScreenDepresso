@@ -9,7 +9,7 @@ from . import __version__
 from .i18n import tr, format_number
 from .release_notes import installed_release_notes
 from .updater import (check_update, download_release, system_environment,
-                      start_windows_installer, start_restarted_application)
+                      start_windows_installer, start_macos_installer, start_restarted_application)
 
 
 class UpdatePanel(QWidget):
@@ -34,6 +34,7 @@ class UpdatePanel(QWidget):
         self.label.setTextFormat(Qt.TextFormat.PlainText)
         self.label.setWordWrap(True)
         self.label.setMinimumHeight(60)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.label)
         self.progress_bar = QProgressBar()
         layout.addWidget(self.progress_bar)
@@ -41,23 +42,23 @@ class UpdatePanel(QWidget):
         self.action_stack = QStackedWidget()
         self.action_stack.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.button = QPushButton()
-        self.button.setMinimumWidth(210)
+        self.button.setMinimumWidth(160)
         self.button.clicked.connect(self.perform)
         self.loader = QProgressBar()
         self.loader.setRange(0, 0)
         self.loader.setTextVisible(False)
-        self.loader.setMinimumWidth(210)
+        self.loader.setMinimumWidth(160)
         self.action_stack.addWidget(self.button)
         self.action_stack.addWidget(self.loader)
         actions.addWidget(self.action_stack)
         self.keep_button = QPushButton()
         self.keep_button.clicked.connect(self.keep_current)
         actions.addWidget(self.keep_button)
-        actions.addStretch()
-        layout.addLayout(actions)
         self.notes_button = QPushButton()
         self.notes_button.setCheckable(True)
-        layout.addWidget(self.notes_button, 0, Qt.AlignmentFlag.AlignLeft)
+        actions.addWidget(self.notes_button)
+        actions.addStretch()
+        layout.addLayout(actions)
         self.notes_view = QTextBrowser()
         self.notes_view.setOpenExternalLinks(False)
         self.notes_view.setMinimumHeight(180)
@@ -92,6 +93,8 @@ class UpdatePanel(QWidget):
             text = tr('Waiting for Ubuntu authorization and installation…')
         elif self.phase == 'ready':
             text = tr('Download verified. Restart to install the update and reopen the application. Save your edits first.')
+        elif self.phase in ('mac_ready', 'mac_manual'):
+            text = tr('Download verified. Open the installer, quit ScreenDepresso, drag the new app to Applications to replace it, then reopen it. Save your edits first.')
         elif self.phase == 'installed':
             text = tr('Update installed. Restart the application to use the new version. Save your edits first.')
         elif self.phase == 'manual':
@@ -103,7 +106,8 @@ class UpdatePanel(QWidget):
         else:
             text = installed
         self.label.setText(text+('\n'+tr(self.error_message) if self.error_message else ''))
-        primary = ('Restart application' if self.phase in ('ready', 'installed') else
+        primary = ('Open installer' if self.phase in ('mac_ready', 'mac_manual') else
+                   'Restart application' if self.phase in ('ready', 'installed') else
                    'Download and install' if self.release is not None and self.phase in ('available', 'error') else
                    'Check for updates')
         self.button.setText(tr(primary))
@@ -115,9 +119,9 @@ class UpdatePanel(QWidget):
         self.action_stack.setCurrentWidget(self.loader if self.phase == 'checking' else self.button)
         self.loader.setToolTip(tr('Checking published versions on GitHub…'))
         self.progress_bar.setToolTip(tr('Download progress'))
-        self.progress_bar.setVisible(self.phase in ('downloading', 'installing', 'ready', 'installed', 'restarting'))
+        self.progress_bar.setVisible(self.phase in ('downloading', 'installing', 'ready', 'installed', 'restarting', 'mac_ready', 'mac_manual'))
         self.progress_bar.setRange(0, 0 if self.phase == 'installing' else 100)
-        if self.phase in ('ready', 'installed', 'restarting'):
+        if self.phase in ('ready', 'installed', 'restarting', 'mac_ready', 'mac_manual'):
             self.progress_bar.setValue(100)
         elif self.phase == 'downloading':
             self.progress_bar.setValue(self.received*100//self.total if self.total else 0)
@@ -133,7 +137,7 @@ class UpdatePanel(QWidget):
         threading.Thread(target=run, daemon=True).start()
 
     def check_for_updates(self):
-        if self.busy or self.phase in ('ready', 'installed'):
+        if self.busy or self.phase in ('ready', 'installed', 'mac_ready', 'mac_manual'):
             return
         self.release = None
         self.error_message = ''
@@ -143,7 +147,16 @@ class UpdatePanel(QWidget):
     def perform(self):
         if self.busy:
             return
-        if self.phase in ('ready', 'installed'):
+        if self.phase in ('mac_ready', 'mac_manual'):
+            try:
+                start_macos_installer(self.package)
+                self.installer_started = True
+                self.phase = 'mac_manual'
+                self.error_message = ''
+            except Exception as exc:
+                self.error_message = tr('Could not open the installer. Try again.')+'\n'+str(exc)
+            self.render()
+        elif self.phase in ('ready', 'installed'):
             self.restart()
         elif self.release is not None and self.phase in ('available', 'error'):
             self.phase = 'downloading'
@@ -175,6 +188,8 @@ class UpdatePanel(QWidget):
         self.package = Path(result)
         if sys.platform == 'win32':
             self.show_restart('ready')
+        elif sys.platform == 'darwin':
+            self.show_restart('mac_ready')
         else:
             self.install_linux()
 

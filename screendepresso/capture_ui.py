@@ -12,7 +12,7 @@ from .platform_support import crop_desktop
 class RegionOverlay(QWidget):
     def __init__(self, owner, screen):
         flags = Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
-        if sys.platform != 'win32':
+        if sys.platform.startswith('linux'):
             flags |= Qt.WindowType.X11BypassWindowManagerHint
         super().__init__(None, flags)
         self.owner = owner
@@ -136,7 +136,12 @@ class Selector(QObject):
 def window_preview(wid, rect, desktop, geometry):
     screen = QGuiApplication.screenAt(rect.center()) or QGuiApplication.primaryScreen()
     try:
-        preview = screen.grabWindow(wid) if screen is not None else None
+        if sys.platform == 'darwin':
+            from .macos_backend import capture_window
+            from PySide6.QtGui import QPixmap
+            preview = QPixmap.fromImage(capture_window(wid))
+        else:
+            preview = screen.grabWindow(wid) if screen is not None else None
     except RuntimeError:
         preview = None
     if preview is None or preview.isNull():

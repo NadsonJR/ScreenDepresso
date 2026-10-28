@@ -1,3 +1,14 @@
+## Novidades da versão 0.7.0
+
+- Aba Atualizações com a versão instalada centralizada e botões lado a lado, incluindo as notas da versão instalada.
+- Seta, retângulo, texto, balões e desfoque permanecem ativos para criar vários objetos em sequência. Selecione **Selecionar/Mover** para ajustar objetos existentes.
+- Confirmação/cancelamento de texto e desfazer/refazer preservam a ferramenta ativa.
+- Primeiros instaladores nativos **macOS 15+**, separados para **Apple Silicon (arm64)** e **Intel (amd64)**, em formato DMG.
+- Backend macOS com permissão de gravação de tela, descoberta e miniaturas de janelas, captura nativa de janela, atalhos globais Carbon e diretórios do perfil do usuário.
+- Atualizador macOS seleciona e verifica o DMG correto. **Abrir instalador** abre a imagem de disco; encerre o app e substitua-o em Aplicativos antes de reabrir. A substituição pelo Finder é manual nesta versão.
+- Apps macOS possuem assinatura ad hoc, sem notarização Apple. Na primeira abertura, pode ser necessário usar **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim** e conceder permissão de gravação de tela. Não é necessário compilar.
+- Builds e testes automatizados em runners nativos Intel/Apple Silicon; capturas reais e permissões exigem validação em uma sessão de usuário no Mac.
+
 ## Novidades da versão 0.6.7
 
 - Clique direito nas abas: **Fechar todas as abas**, **Fechar essa aba** e **Fechar outras abas**, atuando sobre a aba clicada mesmo quando ela não está ativa.

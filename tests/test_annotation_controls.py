@@ -57,6 +57,7 @@ def test_balloon_preview_export_edit_tail_and_undo(style):
     assert canvas.image == preview
     assert canvas.objects[0]['style'] == style
     old_tail = canvas.objects[0]['tail'][:]
+    canvas.tool = 'selecionar'
     gesture(canvas, old_tail, (135, 110))
     assert canvas.objects[0]['tail'] == [135, 110]
     canvas.undo()
@@ -205,6 +206,7 @@ def test_text_and_balloon_editing_at_zoom_preserve_image_coordinates():
     obj = canvas.objects[0]
     assert obj['a'] == [20, 20] and obj['b'] == [110, 70]
     tail = obj['tail'][:]
+    canvas.tool = 'selecionar'
     gesture(canvas, [v*2 for v in tail], (280, 220))
     assert obj['tail'] == [140, 110]
     canvas.tool = 'texto'
@@ -218,6 +220,7 @@ def test_text_and_balloon_editing_at_zoom_preserve_image_coordinates():
     assert canvas.image == result
     obj = canvas.objects[-1]
     point = QPoint(*obj['a'])+QPoint(5, 5)
+    canvas.tool = 'selecionar'
     QTest.mouseDClick(canvas, Qt.MouseButton.LeftButton, pos=point*3)
     assert canvas.text_editor is not None
     canvas.text_editor.setPlainText('Edited')
@@ -239,3 +242,46 @@ def test_changing_font_via_popup_keeps_the_text(window):
     window.canvas.finish_text()
     assert window.canvas.objects[-1]['text'] == 'Keep this text'
     assert window.canvas.objects[-1]['font_size'] == 36
+
+
+@pytest.mark.parametrize('tool', ['seta', 'retângulo', 'balao', 'desfoque'])
+def test_drawing_tools_keep_adding_objects_until_select_is_chosen(tool):
+    canvas = Canvas()
+    canvas.load(image())
+    canvas.tool = tool
+    gesture(canvas, (20, 20), (100, 70))
+    original = canvas.clone_object(canvas.objects[0])
+    # Drawing over the first object must create another, without moving it.
+    gesture(canvas, (30, 30), (120, 90))
+    assert canvas.tool == tool and len(canvas.objects) == 2
+    assert canvas.objects[0] == original
+    canvas.undo()
+    assert canvas.tool == tool and len(canvas.objects) == 1
+    canvas.redo()
+    assert canvas.tool == tool and len(canvas.objects) == 2
+    canvas.tool = 'selecionar'
+    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(75, 60))
+    gesture(canvas, (120, 90), (140, 110))
+    assert canvas.tool == 'selecionar' and len(canvas.objects) == 2
+    assert canvas.objects[1]['b'] == [140, 110]
+
+
+def test_text_stays_active_after_confirm_cancel_and_switching_tools():
+    canvas = Canvas()
+    canvas.load(image())
+    canvas.tool = 'texto'
+    for text, point in [('First', (10, 10)), ('Second', (20, 60))]:
+        gesture(canvas, point, (150, point[1]+40))
+        canvas.text_editor.setPlainText(text)
+        QTest.keyClick(canvas.text_editor, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+        assert canvas.tool == 'texto' and canvas.text_editor is None
+    assert [obj['text'] for obj in canvas.objects] == ['First', 'Second']
+    gesture(canvas, (10, 10), (140, 70))
+    canvas.text_editor.setPlainText('Cancelled')
+    QTest.keyClick(canvas.text_editor, Qt.Key.Key_Escape)
+    assert canvas.tool == 'texto' and len(canvas.objects) == 2
+    gesture(canvas, (15, 15), (140, 70))
+    canvas.text_editor.setPlainText('Committed when switching')
+    canvas.tool = 'selecionar'
+    assert len(canvas.objects) == 3 and canvas.tool == 'selecionar'
+    canvas.close()

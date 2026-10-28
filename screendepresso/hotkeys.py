@@ -90,4 +90,7 @@ def Hotkeys():
     if sys.platform == 'win32':
         from .windows_backend import WindowsHotkeys
         return WindowsHotkeys()
+    if sys.platform == 'darwin':
+        from .macos_backend import MacHotkeys
+        return MacHotkeys()
     return X11Hotkeys()

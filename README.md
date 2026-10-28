@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.6.7)
+## Instalador e atualizações (v0.7.0)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.6.7_amd64.deb
+sudo apt install ./screendepresso_0.7.0_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Settings → Updates → Check for updates → Download and install**. Todo o fluxo acontece na própria aba, com a opção de manter a versão atual. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições e use **Restart application** ao concluir a atualização. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.7` e `git push origin v0.6.7`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.7.0` e `git push origin v0.7.0`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.6.7_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.7.0_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -252,3 +252,23 @@ Clique com o botão direito em uma aba para **Close all tabs**, **Close this tab
 No **Workspace**, clique com o botão direito na miniatura para **Duplicate** ou **Delete**. Os três botões superiores foram substituídos por um ícone de atualização no canto superior direito. **Ctrl+D**, **Delete**, atualização automática e arraste para o editor continuam disponíveis. Excluir ainda move para a lixeira do sistema.
 
 Em **Settings → Updates**, clique em **Release notes** para expandir as notas da versão instalada na própria aba. As notas acompanham o aplicativo, funcionam offline e seguem o idioma escolhido. Uma versão nova disponível não substitui essas notas pelas da versão ainda não instalada.
+
+## Desenho contínuo e macOS (0.7.0)
+
+Seta, retângulo, texto, balão e desfoque permanecem ativos após criar um objeto. Continue clicando/arrastando para adicionar outros, inclusive sobre objetos anteriores. Para mover, redimensionar ou reeditar texto com duplo clique, escolha **Select / move**. Texto é confirmado com Ctrl+Enter (Command+Enter no Mac), clique fora ou troca de ferramenta; Esc cancela apenas o texto atual. Desfazer/refazer preserva a ferramenta ativa. O comportamento dos marcadores numerados foi mantido.
+
+Em **Settings → Updates**, a versão instalada fica centralizada e os botões ficam na mesma linha, incluindo **Release notes**.
+
+### macOS 15 ou posterior
+
+Há instaladores DMG separados para **Apple Silicon (arm64)** e **Intel (amd64)** nas Releases. Baixe o pacote correspondente ao seu Mac, abra o DMG e arraste **ScreenDepresso.app** para **Applications/Aplicativos**. Não é necessário Python, pip, X11 ou compilar. O workflow usa runners macOS nativos em ambas as arquiteturas para executar os testes, montar os DMGs, copiar o app e verificar a abertura do pacote instalado.
+
+Esta primeira versão usa assinatura ad hoc e **não é notarizada pela Apple**. O Gatekeeper pode exigir **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim** na primeira abertura. Distribuição assinada/notarizada exige certificado Developer ID e credenciais de notarização do proprietário. Nenhuma credencial Apple foi incluída no código.
+
+Na primeira captura, permita o ScreenDepresso em **Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema** (o nome pode variar conforme a versão/idioma do macOS) e reabra o app. Capturas não gravam áudio. Sem a permissão, o app mostra instruções, preservando a edição atual. Captura de tela inteira/região usa o desktop do Qt, inclusive Retina e múltiplos monitores; captura de janela usa o utilitário nativo `screencapture`, com miniaturas via Quartz. Conteúdo protegido pelo macOS pode não ser capturado.
+
+Os atalhos globais usam Carbon, sem Xlib e sem monitorar todas as teclas. O padrão é **Command+Shift+1/2/3**, seguindo a convenção do Qt: `Ctrl` no formato de configuração corresponde a Command no Mac e `Meta` a Control. Teclas ausentes no Mac, como Print e F21–F35, são recusadas ao configurar. O ícone da bandeja fica na barra de menus. Configurações e capturas ficam em `~/Library/Application Support/ScreenDepresso`, respeitando diretórios personalizados.
+
+O atualizador escolhe o DMG da arquitetura em execução e verifica origem, tamanho e SHA-256. Ao terminar, **Open installer** abre o DMG. Salve suas edições, encerre o app, substitua-o em Aplicativos e abra a nova versão. A substituição pelo Finder é manual nesta primeira versão; as configurações e o workspace são preservados.
+
+Os testes automatizados do macOS não concedem permissão de gravação de tela: a validação real de capturas, atalhos físicos, múltiplos monitores e permissões deve ser feita numa sessão de usuário no Mac.

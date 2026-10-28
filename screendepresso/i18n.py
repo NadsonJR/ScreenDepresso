@@ -219,6 +219,19 @@ CATALOG.update({
  'Refresh workspace thumbnails using the icon in the upper-right corner.': 'Atualize as miniaturas do workspace pelo ícone no canto superior direito.',
  'Read the installed version’s release notes in Settings → Updates, even without an internet connection.': 'Leia as notas da versão instalada em Configurações → Atualizações, mesmo sem conexão com a internet.',
 })
+CATALOG.update({
+ 'Allow ScreenDepresso in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen the app.': 'Permita o ScreenDepresso em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema e reabra o aplicativo.',
+ 'Could not capture this window. Check Screen Recording permission and try again.': 'Não foi possível capturar esta janela. Verifique a permissão de gravação de tela e tente novamente.',
+ 'Could not register macOS global hotkeys.': 'Não foi possível registrar os atalhos globais do macOS.',
+ 'Updates support Windows/Linux x86_64 and macOS Intel/Apple Silicon.': 'As atualizações estão disponíveis para Windows/Linux x86_64 e macOS Intel/Apple Silicon.',
+ 'Open installer': 'Abrir instalador',
+ 'Could not open the installer. Try again.': 'Não foi possível abrir o instalador. Tente novamente.',
+ 'Download verified. Open the installer, quit ScreenDepresso, drag the new app to Applications to replace it, then reopen it. Save your edits first.': 'Download verificado. Abra o instalador, encerre o ScreenDepresso, arraste o novo app para Aplicativos para substituí-lo e reabra. Salve suas edições antes.',
+ 'Update controls appear side by side, with the installed version centered above them.': 'Os controles de atualização ficam lado a lado, com a versão instalada centralizada acima deles.',
+ 'Arrow, rectangle, text, balloon and blur tools stay active for repeated annotations. Choose Select/Move to edit existing objects.': 'As ferramentas de seta, retângulo, texto, balão e desfoque continuam ativas para adicionar vários objetos. Escolha Selecionar/Mover para editar objetos existentes.',
+ 'macOS 15 or later is supported on Apple Silicon and Intel, with native global hotkeys, screen permissions, window previews and DMG installers.': 'Suporte ao macOS 15 ou posterior em Apple Silicon e Intel, com atalhos globais nativos, permissões de tela, prévias de janelas e instaladores DMG.',
+ 'On macOS, updates are verified before opening the disk image. Quit the old app and replace it in Applications.': 'No macOS, as atualizações são verificadas antes de abrir a imagem de disco. Encerre o app antigo e substitua-o em Aplicativos.',
+})
 REVERSE = {}
 for english, translated in CATALOG.items():
     REVERSE.setdefault(translated, english)

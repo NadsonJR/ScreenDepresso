@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-def merge(linux_directory, windows_directory, output_directory):
+def merge(linux_directory, windows_directory, output_directory, *macos_directories):
     linux_directory, windows_directory = Path(linux_directory), Path(windows_directory)
     output = Path(output_directory)
     linux = json.loads((linux_directory/'update.json').read_text(encoding='utf-8'))
@@ -17,10 +17,21 @@ def merge(linux_directory, windows_directory, output_directory):
         raise ValueError('Invalid version.')
     combined = {'version': version}
     checksums = []
-    for directory, manifest, key, filename in (
+    packages = [
         (linux_directory, linux, 'linux-amd64', f'screendepresso_{version}_amd64.deb'),
         (windows_directory, windows, 'windows-amd64', f'screendepresso_{version}_windows_amd64_setup.exe'),
-    ):
+    ]
+    for directory in macos_directories:
+        directory = Path(directory)
+        manifest = json.loads((directory/'macos-update.json').read_text(encoding='utf-8'))
+        keys = set(manifest)-{'version'}
+        if manifest.get('version') != version or len(keys) != 1 or not keys <= {'macos-arm64', 'macos-amd64'}:
+            raise ValueError('Invalid macOS installer manifest.')
+        key = keys.pop()
+        if any(package[2] == key for package in packages):
+            raise ValueError('Duplicate macOS architecture.')
+        packages.append((directory, manifest, key, f'screendepresso_{version}_macos_{key.split("-")[1]}.dmg'))
+    for directory, manifest, key, filename in packages:
         metadata = manifest[key]
         package = directory/filename
         with package.open('rb') as stream:

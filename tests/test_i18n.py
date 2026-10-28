@@ -22,8 +22,9 @@ def test_english_default_and_live_portuguese_setting(tmp_path, monkeypatch):
         ribbon = window.findChild(QToolBar, 'ribbon')
         assert 'Save' in [a.text() for a in ribbon.actions()]
         settings = SettingsDialog(window)
-        assert 'Ctrl' in settings.shortcuts['tela'].findChild(QLineEdit).text()
-        assert 'Shift' in settings.shortcuts['tela'].findChild(QLineEdit).text()
+        from PySide6.QtGui import QKeySequence
+        assert settings.shortcuts['tela'].keySequence().toString(QKeySequence.SequenceFormat.PortableText) == 'Ctrl+Shift+1'
+        assert settings.shortcuts['tela'].findChild(QLineEdit).text()
         tabs = settings.findChild(QTabWidget)
         assert [tabs.tabText(i) for i in range(tabs.count())] == ['Hotkeys', 'Files', 'Updates', 'Language']
         assert [settings.language.itemData(i) for i in range(settings.language.count())] == ['en', 'pt_BR']
