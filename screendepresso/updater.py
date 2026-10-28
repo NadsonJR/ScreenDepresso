@@ -72,12 +72,14 @@ def check_update(current_version):
         raise ValueError(tr('Update manifest exceeds the size limit.'))
     return Release.parse(json.loads(content), current_version)
 
-def download_release(release):
+def download_release(release, progress=None):
     directory = Path(tempfile.mkdtemp(prefix='screendepresso-update-'))
     path = directory / release.filename
     try:
         digest = hashlib.sha256()
         count = 0
+        if progress:
+            progress(0, release.size)
         with open_url(release.url) as response, path.open('xb') as output:
             while (chunk := response.read(1024 * 1024)):
                 count += len(chunk)
@@ -85,6 +87,8 @@ def download_release(release):
                     raise ValueError(tr('Download is larger than the announced package.'))
                 digest.update(chunk)
                 output.write(chunk)
+                if progress:
+                    progress(count, release.size)
         if count != release.size or digest.hexdigest() != release.sha256:
             raise ValueError(tr('SHA-256 verification failed. The package was discarded.'))
         directory.chmod(493)
@@ -108,7 +112,7 @@ def system_environment():
     return env
 
 
-def start_windows_installer(path):
+def start_windows_installer(path, restart=False):
     """Detach the verified installer; it outlives the current app during upgrade."""
     import ctypes
     import subprocess
@@ -120,7 +124,21 @@ def start_windows_installer(path):
         kernel.SetDllDirectoryW.argtypes = [ctypes.c_wchar_p]
         kernel.SetDllDirectoryW(None)
     try:
-        return subprocess.Popen([str(path), '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'], env=system_environment())
+        options = ['/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS']
+        if restart:
+            options = ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
+                       '/CLOSEAPPLICATIONS', '/NORESTARTAPPLICATIONS', '/SCREENDEPRESSO_RESTART=1']
+        return subprocess.Popen([str(path), *options], env=system_environment())
     finally:
         if kernel is not None:
             kernel.SetDllDirectoryW(getattr(sys, '_MEIPASS', None))
+
+
+def start_restarted_application():
+    """Start the new installation; it waits for the current instance to exit."""
+    import subprocess
+    import sys
+    command = [sys.executable] if getattr(sys, 'frozen', False) else [sys.executable, '-m', 'screendepresso.app']
+    return subprocess.Popen([*command, '--restart-after-update'], env=system_environment(),
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, start_new_session=True)

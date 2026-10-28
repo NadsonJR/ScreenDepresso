@@ -1,3 +1,13 @@
+## Novidades da versão 0.6.2
+
+- Zoom pelo scroll do mouse, mantendo o ponto sob o cursor; Shift+scroll mantém a rolagem da imagem.
+- Modelos de seta clássica, preenchida, dupla, tracejada e linha simples no menu do botão de seta, com cores e edição de objetos existentes.
+- Botões e fundos dos ícones quadrados.
+- Desfoque em uma camada compartilhada: todas as áreas selecionadas continuam nítidas e a intensidade é comum. O modo anterior continua disponível como **Sequential blur (legacy)** no menu do desfoque.
+- Consulta de atualizações automática, sem botão durante a verificação ou quando já está na versão mais recente.
+- Barra de progresso real no download, com validação de tamanho e SHA-256 preservada.
+- Botão **Restart application** ao concluir: no Linux, reabre após a instalação; no Windows, instala e reabre a aplicação quando o usuário decide reiniciar.
+
 ## Novidades da versão 0.6.1
 
 - Nenhuma aba visível quando não há imagens abertas.

@@ -1,11 +1,41 @@
 """Open captures keep independent canvases, edit history and scroll positions."""
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPointF
 from PySide6.QtWidgets import QScrollArea, QTabWidget
 
 from .editor import Canvas
 from .i18n import tr
+
+
+class CaptureScrollArea(QScrollArea):
+    def __init__(self):
+        super().__init__()
+        self.wheel_steps = 0.0
+
+    def set_zoom(self, percent, anchor=None):
+        canvas = self.widget()
+        anchor = QPointF(anchor if anchor is not None else self.viewport().rect().center())
+        point = (anchor-QPointF(canvas.pos()))/canvas.zoom
+        canvas.set_zoom(percent)
+        offset = QPointF(canvas.pos())+point*canvas.zoom-anchor
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value()+round(offset.x()))
+        self.verticalScrollBar().setValue(self.verticalScrollBar().value()+round(offset.y()))
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            super().wheelEvent(event)
+            return
+        if self.widget().base.isNull():
+            event.ignore()
+            return
+        delta = event.angleDelta().y()/120 if event.angleDelta().y() else event.pixelDelta().y()/60
+        self.wheel_steps += delta
+        steps = int(self.wheel_steps)
+        if steps:
+            self.wheel_steps -= steps
+            self.set_zoom(round(self.widget().zoom*100)+steps*10, event.position())
+        event.accept()
 
 
 class CaptureTabs(QTabWidget):
@@ -26,7 +56,7 @@ class CaptureTabs(QTabWidget):
         return self.currentWidget().widget()
 
     def add_document(self, image=None, path=None, capture=False):
-        page = QScrollArea()
+        page = CaptureScrollArea()
         page.setAlignment(Qt.AlignmentFlag.AlignCenter)
         canvas = Canvas()
         page.setWidget(canvas)

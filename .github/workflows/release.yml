@@ -41,7 +41,14 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             test "$GITHUB_REF_NAME" = "v$(uv run --frozen python -c 'from screendepresso import __version__; print(__version__)')"
           fi
-          uv run --frozen pytest -q
+          set +e
+          uv run --frozen pytest -q --junitxml=linux-tests.xml
+          test_exit=$?
+          set -e
+          if [ "$test_exit" -ne 0 ]; then
+            uv run --frozen python packaging/report_tests.py linux-tests.xml Linux
+          fi
+          exit "$test_exit"
       - name: Build installer and update manifest
         run: uv run --frozen python packaging/build_deb.py
       - name: Install and smoke-test packaged application
@@ -96,6 +103,21 @@ jobs:
           $env:SCREENDEPRESSO_TEST_EXE = Join-Path $target 'screendepresso.exe'
           uv run --frozen python -c "import os, subprocess; subprocess.run([os.environ['SCREENDEPRESSO_TEST_EXE'], '--smoke-test'], check=True, timeout=30)"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $upgrade = Start-Process $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/NORESTARTAPPLICATIONS', '/SCREENDEPRESSO_RESTART=1', "/DIR=$target") -PassThru
+          if (-not $upgrade.WaitForExit(60000)) { $upgrade.Kill(); throw 'Upgrade installer timed out' }
+          if ($upgrade.ExitCode -ne 0) { throw "Upgrade installer exited with $($upgrade.ExitCode)" }
+          $deadline = (Get-Date).AddSeconds(20)
+          $restarted = @()
+          do {
+            $restarted = @(Get-Process -Name screendepresso -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $env:SCREENDEPRESSO_TEST_EXE })
+            if ($restarted.Count -gt 0) { break }
+            Start-Sleep -Milliseconds 200
+          } while ((Get-Date) -lt $deadline)
+          if ($restarted.Count -ne 1) { throw 'The update installer did not restart exactly one application instance' }
+          Start-Sleep -Seconds 1
+          $restarted[0].Refresh()
+          if ($restarted[0].HasExited) { throw 'The restarted application exited unexpectedly' }
+          $restarted | Stop-Process -Force
       - uses: actions/upload-artifact@v4
         with:
           name: screendepresso-windows-amd64

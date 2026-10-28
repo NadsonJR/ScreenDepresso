@@ -41,3 +41,10 @@ Name: "{autodesktop}\ScreenDepresso"; Filename: "{app}\screendepresso.exe"; Task
 
 [Run]
 Filename: "{app}\screendepresso.exe"; Description: "{cm:LaunchProgram,ScreenDepresso}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\screendepresso.exe"; Flags: nowait runasoriginaluser; Check: RestartAfterUpdate
+
+[Code]
+function RestartAfterUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:SCREENDEPRESSO_RESTART|0}') = '1';
+end;

@@ -2,11 +2,11 @@ from .i18n import tr
 """Retained annotations with undo/redo and non-destructive previews."""
 import copy
 import math
-from PIL import Image, ImageFilter
 from PySide6.QtCore import Qt, QPoint, QPointF, QRect, QSize, QSignalBlocker, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont, QFontMetrics, QLinearGradient
 from PySide6.QtWidgets import QWidget, QPlainTextEdit, QApplication
-from .annotations import BUBBLE_STYLES, bubble_path, text_document, text_font
+from .annotations import ARROW_STYLES, BUBBLE_STYLES, bubble_path, draw_arrow, text_document, text_font
+from .blur import shared_blur, sequential_blur
 
 class InlineTextEdit(QPlainTextEdit):
 
@@ -34,6 +34,8 @@ class Canvas(QWidget):
     bubble_changed = Signal()
     text_format_changed = Signal()
     zoom_changed = Signal(int)
+    arrow_style_changed = Signal()
+    blur_settings_changed = Signal()
 
     def __init__(self):
         super().__init__()
@@ -51,6 +53,8 @@ class Canvas(QWidget):
         self.bubble_format = {'style': 'oval', 'fill': '#ffffff', 'outline': '#111827'}
         self.text_format = {'font_family': QFont().family(), 'font_size': 24, 'color': '#ef233c'}
         self.zoom = 1.0
+        self.arrow_style = 'classic'
+        self.blur_mode = 'shared'
         self.begin = self.end = None
         self.pending = None
         self.action = None
@@ -94,17 +98,19 @@ class Canvas(QWidget):
         return {key: QImage(value) if isinstance(value, QImage) else copy.deepcopy(value) for key, value in obj.items()}
 
     def snapshot(self):
-        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format.copy(), self.text_format.copy())
+        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format.copy(), self.text_format.copy(), self.arrow_style, self.blur_mode, self.blur_radius)
 
     def restore(self, state):
         self.finish_text(False)
-        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format, self.text_format = state
+        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format, self.text_format, self.arrow_style, self.blur_mode, self.blur_radius = state
         self.selected = None
         self.arrow_color_changed.emit(self.arrow_color)
         self.rectangle_color_changed.emit(self.rectangle_color)
         self.marker_color_changed.emit(self.marker_color)
         self.bubble_changed.emit()
         self.text_format_changed.emit()
+        self.arrow_style_changed.emit()
+        self.blur_settings_changed.emit()
         self.pending = self.before = self.begin = self.end = None
         self.sync_size()
         self.update()
@@ -175,6 +181,31 @@ class Canvas(QWidget):
         if obj is not None and obj['kind'] == 'seta':
             obj['color'] = name
         self.arrow_color_changed.emit(name)
+        self.commit(before)
+
+    def set_arrow_style(self, style):
+        self.finish_text()
+        if style not in ARROW_STYLES:
+            return
+        before = self.snapshot()
+        self.arrow_style = style
+        if self.selected is not None and self.objects[self.selected]['kind'] == 'seta':
+            self.objects[self.selected]['style'] = style
+        if self.snapshot() != before:
+            self.arrow_style_changed.emit()
+            self.commit(before)
+
+    def set_blur_mode(self, mode):
+        if mode not in ('shared', 'sequential') or mode == self.blur_mode:
+            return
+        self.finish_text()
+        before = self.snapshot()
+        self.blur_mode = mode
+        if mode == 'shared':
+            for obj in self.objects:
+                if obj['kind'] == 'desfoque':
+                    obj['radius'] = self.blur_radius
+        self.blur_settings_changed.emit()
         self.commit(before)
 
     def set_rectangle_color(self, color):
@@ -343,15 +374,7 @@ class Canvas(QWidget):
     def draw_object(self, image, obj):
         rect = self.object_rect(obj)
         if obj['kind'] == 'desfoque':
-            part = image.convertToFormat(QImage.Format.Format_RGBA8888)
-            pil = Image.frombytes('RGBA', (part.width(), part.height()), bytes(part.bits()), 'raw', 'RGBA', part.bytesPerLine())
-            data = pil.filter(ImageFilter.GaussianBlur(obj['radius'])).tobytes()
-            blurred = QImage(data, part.width(), part.height(), part.width() * 4, QImage.Format.Format_RGBA8888).copy()
-            original = image.copy(rect)
-            p = QPainter(image)
-            p.drawImage(0, 0, blurred)
-            p.drawImage(rect.topLeft(), original)
-            p.end()
+            sequential_blur(image, rect, obj['radius'])
             return
         p = QPainter(image)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -365,12 +388,7 @@ class Canvas(QWidget):
         elif obj['kind'] == 'imagem':
             p.drawImage(rect, obj['image'])
         elif obj['kind'] == 'seta':
-            p.setPen(QPen(QColor(obj.get('color', '#ef233c')), 4))
-            a, b = (QPoint(*obj['a']), QPoint(*obj['b']))
-            p.drawLine(a, b)
-            angle = math.atan2(b.y() - a.y(), b.x() - a.x())
-            for offset in (-0.5, 0.5):
-                p.drawLine(b, QPoint(round(b.x() - 20 * math.cos(angle + offset)), round(b.y() - 20 * math.sin(angle + offset))))
+            draw_arrow(p, obj)
         elif obj['kind'] == 'retângulo':
             p.setPen(QPen(QColor(obj.get('color', '#ef233c')), 4))
             p.drawRect(rect.adjusted(2, 2, -2, -2))
@@ -383,10 +401,17 @@ class Canvas(QWidget):
         image = self.base.copy()
         if image.isNull():
             return image
+        if self.blur_mode == 'shared':
+            regions = [(self.object_rect(obj), obj['radius']) for obj in self.objects if obj['kind'] == 'desfoque']
+            if preview and self.pending and self.pending['kind'] == 'desfoque':
+                regions.append((self.object_rect(self.pending), self.pending['radius']))
+            image = shared_blur(image, regions)
         for index, obj in enumerate(self.objects):
+            if self.blur_mode == 'shared' and obj['kind'] == 'desfoque':
+                continue
             if not preview or self.text_editor is None or index != self.text_index:
                 self.draw_object(image, obj)
-        if preview and self.pending and (self.pending['kind'] not in ('recorte', 'texto')):
+        if preview and self.pending and (self.pending['kind'] not in ('recorte', 'texto')) and not (self.blur_mode == 'shared' and self.pending['kind'] == 'desfoque'):
             self.draw_object(image, self.pending)
         return image
 
@@ -433,6 +458,7 @@ class Canvas(QWidget):
                 self.action = 'marker_center' if obj['kind'] == 'numero' and math.hypot(point.x()-obj['a'][0], point.y()-obj['a'][1]) <= 24 else 'move'
                 if obj['kind'] == 'seta':
                     self.arrow_color_changed.emit(obj.get('color', '#ef233c'))
+                    self.arrow_style_changed.emit()
                 if obj['kind'] == 'retângulo':
                     self.rectangle_color_changed.emit(obj.get('color', '#ef233c'))
                 if obj['kind'] == 'balao':
@@ -447,6 +473,7 @@ class Canvas(QWidget):
         self.pending = {'kind': self.tool, 'a': [point.x(), point.y()], 'b': [point.x(), point.y()], 'radius': self.blur_radius}
         if self.tool == 'seta':
             self.pending['color'] = self.arrow_color
+            self.pending['style'] = self.arrow_style
         if self.tool == 'retângulo':
             self.pending['color'] = self.rectangle_color
         if self.tool == 'numero':
@@ -529,12 +556,16 @@ class Canvas(QWidget):
         self.update()
 
     def set_blur_radius(self, value):
+        before = self.snapshot()
         self.blur_radius = value
-        if self.selected is not None and self.objects[self.selected]['kind'] == 'desfoque':
-            if self.objects[self.selected]['radius'] != value:
-                before = self.snapshot()
-                self.objects[self.selected]['radius'] = value
-                self.commit(before)
+        if self.blur_mode == 'shared':
+            for obj in self.objects:
+                if obj['kind'] == 'desfoque':
+                    obj['radius'] = value
+        elif self.selected is not None and self.objects[self.selected]['kind'] == 'desfoque':
+            self.objects[self.selected]['radius'] = value
+        if self.objects != before[1]:
+            self.commit(before)
 
     def start_text(self, obj, index=None, before=None):
         self.finish_text()

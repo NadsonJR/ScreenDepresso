@@ -170,3 +170,43 @@ else:
             if process.poll() is None:
                 process.kill()
             process.wait(timeout=5)
+
+
+def test_update_restart_waits_for_old_instance_then_opens_new_editor(tmp_path, monkeypatch):
+    import queue
+    import threading
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path/'config'))
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path/'data'))
+    owner = SingleInstance()
+    assert owner.acquire()
+    script = '''
+import sys
+from screendepresso.single_instance import SingleInstance
+original = SingleInstance.acquire
+def acquire(self):
+ result = original(self)
+ if not result: print('waiting', flush=True)
+ return result
+SingleInstance.acquire = acquire
+sys.argv = ['screendepresso', '--smoke-test', '--restart-after-update']
+from screendepresso.app import main
+main()
+'''
+    process = subprocess.Popen([sys.executable,'-c',script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output = queue.Queue()
+    worker = threading.Thread(target=lambda: output.put(process.stdout.readline()))
+    worker.start()
+    try:
+        assert output.get(timeout=10).strip() == 'waiting'
+        worker.join(timeout=1)
+        assert process.poll() is None and owner.owns_lock
+        owner.release()
+        stdout, stderr = process.communicate(timeout=15)
+        assert process.returncode == 0, stderr
+        assert 'OK (offscreen)' in stdout
+    finally:
+        owner.release()
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=5)
+        worker.join(timeout=2)

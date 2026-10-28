@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.6.1)
+## Instalador e atualizações (v0.6.2)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.6.1_amd64.deb
+sudo apt install ./screendepresso_0.6.2_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.1` e `git push origin v0.6.1`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.2` e `git push origin v0.6.2`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -83,7 +83,7 @@ Para remover o aplicativo, use `sudo apt remove screendepresso`. O histórico do
 - **Ctrl+Z** desfaz; **Ctrl+Y** refaz. Uma nova edição após desfazer descarta o caminho de refazer.
 - Após inserir uma anotação, o editor entra em **Selecionar**. Arraste o objeto para mover; arraste uma das duas alças para redimensionar ou ajustar as extremidades de uma seta. **Delete** exclui o objeto selecionado. Dê duplo clique no texto para editar seu conteúdo. O recorte preserva as anotações como objetos e também pode ser desfeito.
 - A seta aparece como seta durante o arraste, inclusive na horizontal ou vertical.
-- **Desfoque** preserva a região selecionada e desfoca o restante da imagem. Ajuste a intensidade de **1 a 100** no campo abaixo das ferramentas; com um efeito de desfoque selecionado, o ajuste modifica esse efeito e pode ser desfeito.
+- **Desfoque** preserva a região selecionada e desfoca o restante da imagem. Ajuste a intensidade de **1 a 100** no menu do próprio botão. No modo padrão, todas as áreas nítidas são combinadas e a intensidade vale para a camada inteira; o modo em sequência permanece disponível no mesmo menu.
 - **Configurações → Hotkeys** permite alterar os três atalhos globais, inclusive usar Print. Atalhos duplicados ou ocupados são rejeitados; os anteriores são restaurados se o novo registro falhar. As alterações entram em vigor ao salvar.
 - **Configurações → Arquivos** define o diretório das novas capturas, do histórico e o destino inicial de exportação. O padrão continua sendo `$XDG_DATA_HOME/screendepresso` ou `~/.local/share/screendepresso`. Arquivos antigos não são movidos; selecione o diretório anterior para vê-los novamente no histórico.
 - **Configurações → Atualizações → Verificar atualizações** inicia a consulta de versões do GitHub.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.6.1_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.6.2_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -196,3 +196,11 @@ Um **asterisco** no título indica alterações não salvas. Use o botão de fec
 - **Zoom**: use o slider no canto inferior esquerdo para visualizar de **10% a 400%**. O zoom fica salvo por aba durante a sessão e não modifica a resolução das imagens copiadas ou exportadas. Desenho, seleção, recorte e texto usam as coordenadas originais mesmo com zoom.
 
 Menus, dicas e controles estão disponíveis em inglês e português BR.
+
+## Scroll, setas, camada de desfoque e atualizações (0.6.2)
+
+- O **scroll do mouse** amplia/reduz a captura em passos de 10%, entre 10% e 400%, mantendo o ponto sob o cursor. Use **Shift+scroll** para rolar a imagem. O slider acompanha o valor e o zoom continua independente por aba.
+- A seta do botão **Arrow** abre os modelos **Classic arrow**, **Filled arrow**, **Double arrow**, **Dashed arrow** e **Line**, além do seletor de cor. Selecionar um objeto existente permite mudar seu modelo e cor sem redesenhar.
+- **Shared blur layer** é o padrão: a imagem é desfocada uma única vez, preservando a união de todas as áreas selecionadas; anotações ficam por cima e a intensidade vale para toda a camada. Para restaurar o comportamento anterior, escolha **Sequential blur (legacy)** no menu do desfoque. Esse modo aplica cada efeito em sequência, com intensidades individuais. A escolha é independente por aba, não exclui os objetos e pode ser desfeita. Os dois renderizadores ficam separados em `screendepresso/blur.py`.
+- **Settings → Updates → Check for updates** consulta automaticamente ao abrir o popup, sem botão de consulta dentro dele. Se houver nova versão, aparece **Download and install**; durante o download, uma barra mostra o progresso em bytes. Tamanho, origem e SHA-256 continuam sendo verificados.
+- Ao concluir, **Restart application** permite escolher quando reiniciar. No Ubuntu, o pacote é instalado mediante autorização do sistema antes de oferecer o reinício. No Windows, o download verificado fica pronto e o botão inicia a instalação e reabre o aplicativo. Salve as edições antes de reiniciar. A proteção de instância única aguarda o encerramento do processo anterior.

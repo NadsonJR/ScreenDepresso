@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, Q
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .documents import CaptureTabs
-from .annotations import BUBBLE_STYLES
+from .annotations import ARROW_STYLES, BUBBLE_STYLES
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
 from .platform_support import capture_desktop, data_directory, global_hotkeys_available
@@ -186,6 +186,7 @@ class MainWindow(QMainWindow):
             button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.setup_bubble_menu(tools)
         self.setup_text_menu(tools)
+        self.setup_arrow_menu(tools)
         self.display_marker_color(self.canvas.marker_color)
         self.display_rectangle_color(self.canvas.rectangle_color)
         self.display_arrow_color(self.canvas.arrow_color)
@@ -231,6 +232,17 @@ class MainWindow(QMainWindow):
         blur_action = QWidgetAction(self.blur_menu)
         blur_action.setDefaultWidget(blur_panel)
         self.blur_menu.addAction(blur_action)
+        self.blur_menu.addSeparator()
+        self.blur_modes = {}
+        blur_modes_group = QActionGroup(self.blur_menu)
+        blur_modes_group.setExclusive(True)
+        for mode, label in [('shared', 'Shared blur layer'), ('sequential', 'Sequential blur (legacy)')]:
+            action = self.blur_menu.addAction(tr(label))
+            action.setCheckable(True)
+            action.setToolTip(tr(label))
+            action.triggered.connect(lambda checked=False, m=mode: self.canvas.set_blur_mode(m))
+            blur_modes_group.addAction(action)
+            self.blur_modes[mode] = action
         blur_button = tools.widgetForAction(self.tool_actions['desfoque'])
         blur_button.setMenu(self.blur_menu)
         blur_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
@@ -350,6 +362,8 @@ class MainWindow(QMainWindow):
                 (canvas.bubble_changed, self.display_bubble_format),
                 (canvas.text_format_changed, self.display_text_format),
                 (canvas.zoom_changed, self.display_zoom),
+                (canvas.arrow_style_changed, self.display_arrow_style),
+                (canvas.blur_settings_changed, self.display_blur_options),
             ]:
                 signal.connect(lambda *args, c=canvas, f=callback: f(*args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
             canvas.setProperty('windowSignalsConnected', True)
@@ -363,6 +377,8 @@ class MainWindow(QMainWindow):
         self.display_bubble_format()
         self.display_text_format()
         self.display_zoom(round(canvas.zoom*100))
+        self.display_arrow_style()
+        self.display_blur_options()
         self.update_dimensions()
         self.tabs.retranslate()
 
@@ -543,13 +559,37 @@ class MainWindow(QMainWindow):
         self.text_color_action.setIcon(toolbar_icon('A', values.get('color', '#ef233c')))
 
     def change_zoom(self, percent):
-        scroll = self.scroll
-        canvas = self.canvas
-        center_x = (scroll.horizontalScrollBar().value()+scroll.viewport().width()/2)/canvas.zoom
-        center_y = (scroll.verticalScrollBar().value()+scroll.viewport().height()/2)/canvas.zoom
-        canvas.set_zoom(percent)
-        scroll.horizontalScrollBar().setValue(round(center_x*canvas.zoom-scroll.viewport().width()/2))
-        scroll.verticalScrollBar().setValue(round(center_y*canvas.zoom-scroll.viewport().height()/2))
+        self.scroll.set_zoom(percent)
+
+    def setup_arrow_menu(self, tools):
+        menu = tools.widgetForAction(self.tool_actions['seta']).menu()
+        menu.addSeparator()
+        self.arrow_styles = {}
+        group = QActionGroup(menu)
+        group.setExclusive(True)
+        for style, label in ARROW_STYLES.items():
+            action = menu.addAction(toolbar_icon('arrow:'+style), tr(label))
+            action.setCheckable(True)
+            action.setToolTip(tr(label))
+            action.triggered.connect(lambda checked=False, s=style: self.choose_arrow_style(s))
+            group.addAction(action)
+            self.arrow_styles[style] = action
+
+    def choose_arrow_style(self, style):
+        self.canvas.set_arrow_style(style)
+        if self.canvas.selected is None or self.canvas.objects[self.canvas.selected]['kind'] != 'seta':
+            self.choose_tool('seta')
+
+    def display_arrow_style(self):
+        obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
+        style = obj.get('style', 'classic') if obj is not None and obj['kind'] == 'seta' else self.canvas.arrow_style
+        self.arrow_styles[style].setChecked(True)
+        self.display_arrow_color(obj.get('color', '#ef233c') if obj is not None and obj['kind'] == 'seta' else self.canvas.arrow_color)
+
+    def display_blur_options(self):
+        self.blur_modes[self.canvas.blur_mode].setChecked(True)
+        selected = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
+        self.display_blur_radius(selected['radius'] if selected is not None and selected['kind'] == 'desfoque' else self.canvas.blur_radius)
 
     def display_zoom(self, percent):
         self.zoom_slider.blockSignals(True)
@@ -577,7 +617,9 @@ class MainWindow(QMainWindow):
             self.canvas.set_arrow_color(color)
 
     def display_arrow_color(self, color):
-        icon = toolbar_icon('arrow', color)
+        obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
+        style = obj.get('style', 'classic') if obj is not None and obj['kind'] == 'seta' else self.canvas.arrow_style
+        icon = toolbar_icon('arrow:'+style, color)
         self.tool_actions['seta'].setIcon(icon)
         self.color_actions['seta'].setIcon(icon)
 
@@ -753,6 +795,12 @@ def main():
     try:
         instance = SingleInstance(parent=app)
         primary = instance.acquire()
+        if not primary and '--restart-after-update' in sys.argv:
+            import time
+            deadline = time.monotonic()+15
+            while not primary and time.monotonic() < deadline:
+                time.sleep(.05)
+                primary = instance.acquire()
     except (OSError, RuntimeError) as exc:
         QMessageBox.critical(None, 'ScreenDepresso', str(exc))
         sys.exit(1)
@@ -786,10 +834,12 @@ def run_application(app, instance):
             raise RuntimeError('Capture tabs smoke test failed')
         canvas = window.canvas
         canvas.objects.append({'kind': 'balao', 'a': [5, 5], 'b': [110, 55], 'tail': [15, 75], **canvas.bubble_format})
+        canvas.objects.extend([{'kind': 'desfoque', 'a': [x, 1], 'b': [x+20, 20], 'radius': 14} for x in (1, 80)])
+        canvas.objects.append({'kind': 'seta', 'a': [20, 70], 'b': [110, 70], 'color': '#ef233c', 'style': 'line'})
         canvas.start_text({'kind': 'texto', 'a': [15, 10], 'b': [105, 50], 'text': 'Smoke', **canvas.text_format})
         canvas.finish_text()
         rendered = canvas.image
-        if rendered == second or len(canvas.objects) != 2:
+        if rendered == second or len(canvas.objects) != 5 or rendered.pixelColor(60, 70) != QColor('#ef233c'):
             raise RuntimeError('Balloon and text smoke test failed')
         window.zoom_slider.setValue(150)
         if canvas.zoom != 1.5 or canvas.image != rendered:

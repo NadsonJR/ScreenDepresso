@@ -39,7 +39,8 @@ def test_english_default_and_live_portuguese_setting(tmp_path, monkeypatch):
         assert translated_tabs.tabText(3) == 'Idioma'
         assert translated.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).text().replace('&', '') == 'Salvar'
         update = UpdateDialog(window)
-        assert update.button.text() == 'Verificar atualizações'
+        assert update.button.isHidden()
+        assert update.button.text() == 'Baixar e instalar'
         assert 'Versão instalada' in update.label.text()
         window.apply_settings(window.settings.directory, DEFAULT_HOTKEYS, 'en')
         assert 'Save' in [a.text() for a in ribbon.actions()]

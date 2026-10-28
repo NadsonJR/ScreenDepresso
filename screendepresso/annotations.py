@@ -1,12 +1,38 @@
 """Vector speech balloons and shared text layout for preview and export."""
 import math
 
-from PySide6.QtCore import QPointF, QRectF
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import (QColor, QFont, QPainterPath, QTextCharFormat,
-                          QTextCursor, QTextDocument, QTextOption)
+                          QTextCursor, QTextDocument, QTextOption, QPen, QPolygonF)
 
 BUBBLE_STYLES = {'oval': 'Speech', 'rounded': 'Rounded',
                  'thought': 'Thought', 'shout': 'Shout'}
+ARROW_STYLES = {'classic': 'Classic arrow', 'filled': 'Filled arrow',
+                'double': 'Double arrow', 'dashed': 'Dashed arrow', 'line': 'Line'}
+
+
+def draw_arrow(painter, obj, head_length=20):
+    style = obj.get('style', 'classic')
+    color = QColor(obj.get('color', '#ef233c'))
+    pen = QPen(color, 4)
+    if style == 'dashed':
+        pen.setStyle(Qt.PenStyle.DashLine)
+    painter.setPen(pen)
+    a, b = QPoint(*obj['a']), QPoint(*obj['b'])
+    painter.drawLine(a, b)
+    if style == 'line':
+        return
+    painter.setPen(QPen(color, 4))
+    angle = math.atan2(b.y()-a.y(), b.x()-a.x())
+    for tip, direction in ([(b, angle), (a, angle+math.pi)] if style == 'double' else [(b, angle)]):
+        corners = [QPoint(round(tip.x()-head_length*math.cos(direction+offset)),
+                          round(tip.y()-head_length*math.sin(direction+offset))) for offset in (-.5, .5)]
+        if style == 'filled':
+            painter.setBrush(color)
+            painter.drawPolygon(QPolygonF([QPointF(tip), QPointF(corners[0]), QPointF(corners[1])]))
+        else:
+            for point in corners:
+                painter.drawLine(tip, point)
 
 
 def bubble_path(rect, obj):

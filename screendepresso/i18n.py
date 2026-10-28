@@ -138,6 +138,19 @@ CATALOG.update({
  'Font family': 'Fonte', 'Font size': 'Tamanho da fonte', 'Text color…': 'Cor do texto…',
  'Zoom': 'Zoom', 'Zoom the active capture (10–400%)': 'Zoom da captura ativa (10–400%)',
 })
+CATALOG.update({
+ 'Classic arrow': 'Seta clássica', 'Filled arrow': 'Seta preenchida',
+ 'Double arrow': 'Seta dupla', 'Dashed arrow': 'Seta tracejada', 'Line': 'Linha',
+ 'Shared blur layer': 'Camada única de desfoque',
+ 'Sequential blur (legacy)': 'Desfoque em sequência (anterior)',
+ 'Download progress': 'Progresso do download',
+ '?\nSave your edits before restarting. Your captures will be preserved.': '?\nSalve suas edições antes de reiniciar. Suas capturas serão preservadas.',
+ 'Download verified. Restart to install the update and reopen the application. Save your edits first.': 'Download verificado. Reinicie para instalar a atualização e reabrir o aplicativo. Salve suas edições antes.',
+ 'Update installed. Restart the application to use the new version. Save your edits first.': 'Atualização instalada. Reinicie o aplicativo para usar a nova versão. Salve suas edições antes.',
+ 'Restart application': 'Reiniciar aplicativo',
+ 'Restart now? Unsaved edits will be lost.': 'Reiniciar agora? Edições não salvas serão perdidas.',
+ 'Could not restart the application. Try again.': 'Não foi possível reiniciar o aplicativo. Tente novamente.',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None
