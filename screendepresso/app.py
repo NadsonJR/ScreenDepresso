@@ -15,6 +15,7 @@ from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
 from .platform_support import capture_desktop, crop_desktop, data_directory, global_hotkeys_available
 from .capture_ui import Selector, WindowPicker
+from .update_panel import UpdatePanel
 
 class History:
 
@@ -154,7 +155,7 @@ class MainWindow(QMainWindow):
         add_action(ribbon, tr('Window'), '▢', lambda: self.capture('janela'))
         add_action(ribbon, tr('Region'), '⌗', lambda: self.capture('região'))
         ribbon.addSeparator()
-        add_action(ribbon, tr('Settings'), '⚙', lambda: SettingsDialog(self).exec())
+        add_action(ribbon, tr('Settings'), '⚙', self.open_settings)
         tools = QToolBar(tr('Tools'), self)
         tools.setObjectName('tools')
         tools.setMovable(False)
@@ -291,6 +292,11 @@ class MainWindow(QMainWindow):
             self.addAction(action)
         self.tab_changed(self.tabs.currentIndex())
         self.refresh()
+        self._settings_dialog = None
+        self.update_panel = UpdatePanel(self)
+        self.update_panel.hide()
+        self.update_panel.quit_requested.connect(self.request_quit)
+        QApplication.instance().aboutToQuit.connect(self.update_panel.shutdown)
         self.hotkeys = Hotkeys()
         self.hotkeys.capture.connect(self.capture)
         self.hotkeys.failed.connect(lambda message: self.statusBar().showMessage(message))
@@ -309,7 +315,7 @@ class MainWindow(QMainWindow):
         for mode in ['tela', 'janela', 'região']:
             menu.addAction(tr({'tela': 'Capture full screen', 'janela': 'Capture window', 'região': 'Capture region'}[mode]), lambda m=mode: self.capture(m))
         menu.addSeparator()
-        menu.addAction(tr('Settings'), lambda: SettingsDialog(self).exec())
+        menu.addAction(tr('Settings'), self.open_settings)
         menu.addAction(tr('Check for updates'), self.check_updates)
         menu.addAction(tr('About'), self.show_about)
         menu.addSeparator()
@@ -409,12 +415,27 @@ class MainWindow(QMainWindow):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.open_editor()
 
+    def open_settings(self, updates=False):
+        dialog = self._settings_dialog
+        if dialog is None:
+            dialog = SettingsDialog(self)
+            self._settings_dialog = dialog
+            dialog.finished.connect(lambda result, d=dialog: self.settings_closed(d))
+        if updates:
+            dialog.show_updates()
+        dialog.showNormal()
+        dialog.raise_()
+        dialog.activateWindow()
+        return dialog
+
+    def settings_closed(self, dialog):
+        if self._settings_dialog is dialog:
+            self._settings_dialog = None
+        dialog.deleteLater()
+
     def check_updates(self):
-        from .update_dialog import UpdateDialog
-        dialog = UpdateDialog(self)
-        dialog.quit_requested.connect(self.request_quit)
-        dialog.perform()
-        dialog.exec()
+        self.open_settings(updates=True)
+        self.update_panel.check_for_updates()
 
     def show_about(self):
         from . import __version__
@@ -428,6 +449,8 @@ class MainWindow(QMainWindow):
 
     def minimize_to_background(self):
         self.canvas.finish_text()
+        if self._settings_dialog is not None:
+            self._settings_dialog.hide()
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
             self.hide()
@@ -446,6 +469,8 @@ class MainWindow(QMainWindow):
     def request_quit(self):
         self._quitting = True
         self.canvas.finish_text()
+        if self._settings_dialog is not None:
+            self._settings_dialog.reject()
         self.stop_background_services()
         self.hide()
         self._quit_application()
@@ -747,6 +772,7 @@ class MainWindow(QMainWindow):
                 self.hotkeys.configure(old)
             raise
         set_language(self.settings.language)
+        self.update_panel.render()
         self.sync_tool(self.canvas.tool)
         self.tabs.retranslate()
         self.history = History(directory)
@@ -792,6 +818,8 @@ class MainWindow(QMainWindow):
             return
         self.canvas.finish_text()
         self._capture_pending = True
+        if self._settings_dialog is not None:
+            self._settings_dialog.hide()
         self.hide()
         QTimer.singleShot(350, lambda: self.prepare_capture(mode, screen_name))
 
@@ -932,6 +960,14 @@ def run_application(app, instance):
     app.aboutToQuit.connect(instance.release)
     window.show()
     if '--smoke-test' in sys.argv:
+        settings = window.open_settings(updates=True)
+        window.update_panel.on_completed('check', None)
+        QApplication.processEvents()
+        if settings.tabs.currentWidget() is not window.update_panel or not window.update_panel.button.isVisible():
+            raise RuntimeError('Inline updates panel smoke test failed')
+        settings.reject()
+        if window.update_panel.parentWidget() is not window:
+            raise RuntimeError('Updates panel was not preserved after closing Settings')
         image = QImage(100, 100, QImage.Format.Format_ARGB32)
         image.fill(QColor('red'))
         window.finish_capture(image)

@@ -1,3 +1,12 @@
+## Novidades da versão 0.6.5
+
+- Fluxo de atualização incorporado à aba **Settings → Updates**, sem popups extras de consulta, confirmação ou reinício.
+- Indicador de carregamento no lugar do botão durante a consulta; quando já está atualizado, o botão reaparece junto à mensagem de versão atual.
+- Ao encontrar uma versão nova, exibe **Download and install** e **Keep current version** na própria aba.
+- Download, progresso, erros, instalação e botão de reinício permanecem no mesmo painel.
+- Fechar e reabrir as configurações preserva a operação e o estado da atualização.
+- Aviso para salvar edições exibido junto ao reinício; a autorização de instalação do sistema permanece quando necessária.
+
 ## Novidades da versão 0.6.4
 
 - Captura de tela inteira combina todos os monitores, incluindo telas à esquerda/acima da principal e monitores com escalas diferentes.

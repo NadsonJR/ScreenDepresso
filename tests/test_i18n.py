@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from screendepresso.app import MainWindow
 from screendepresso.settings import Settings, SettingsDialog, DEFAULT_HOTKEYS
-from screendepresso.update_dialog import UpdateDialog
+from screendepresso.update_panel import UpdatePanel
 from screendepresso.i18n import tr, set_language
 from test_editor import image, drag
 
@@ -38,9 +38,8 @@ def test_english_default_and_live_portuguese_setting(tmp_path, monkeypatch):
         translated_tabs = translated.findChild(QTabWidget)
         assert translated_tabs.tabText(3) == 'Idioma'
         assert translated.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).text().replace('&', '') == 'Salvar'
-        update = UpdateDialog(window)
-        assert update.button.isHidden()
-        assert update.button.text() == 'Baixar e instalar'
+        update = UpdatePanel(window)
+        assert update.button.text() == 'Verificar atualizações'
         assert 'Versão instalada' in update.label.text()
         window.apply_settings(window.settings.directory, DEFAULT_HOTKEYS, 'en')
         assert 'Save' in [a.text() for a in ribbon.actions()]

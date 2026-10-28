@@ -173,6 +173,11 @@ CATALOG.update({
  'The desktop image is too large to capture.': 'A imagem da área de trabalho é grande demais para capturar.',
  'Screen capture is unavailable for monitor: ': 'Captura de tela indisponível no monitor: ',
 })
+CATALOG.update({
+ 'Keep current version': 'Manter versão atual',
+ 'Keeping the current version: ': 'Mantendo a versão atual: ',
+ 'Restarting the application…': 'Reiniciando o aplicativo…',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None

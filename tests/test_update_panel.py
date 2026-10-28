@@ -11,7 +11,7 @@ from PySide6.QtCore import QProcess
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 from screendepresso import updater
-from screendepresso import update_dialog as module
+from screendepresso import update_panel as module
 from screendepresso.i18n import set_language
 
 app = QApplication.instance() or QApplication([])
@@ -30,28 +30,33 @@ def release():
 
 
 @pytest.fixture
-def dialog():
+def dialog(monkeypatch):
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: pytest.fail('Update flow must not open confirmation popups'))
     set_language('en')
-    dialog = module.UpdateDialog()
+    dialog = module.UpdatePanel()
     dialog.show()
     yield dialog
     dialog.busy = False
+    dialog.shutdown()
     dialog.close()
     set_language('en')
 
 
-def test_automatic_check_has_no_buttons_and_latest_result_stays_buttonless(dialog, monkeypatch):
+def test_check_replaces_button_with_loader_and_latest_restores_check_button(dialog, monkeypatch):
     gate = threading.Event()
     monkeypatch.setattr(module, 'check_update', lambda version: gate.wait(3) and None)
     try:
         dialog.perform()
         assert dialog.phase == 'checking' and dialog.busy
+        assert dialog.loader.isVisible()
         assert not any(b.isVisible() for b in dialog.findChildren(QPushButton))
     finally:
         gate.set()
     pump(lambda: not dialog.busy)
     assert dialog.phase == 'latest'
-    assert not dialog.button.isVisible()
+    assert dialog.button.isVisible()
+    assert dialog.button.text() == 'Check for updates'
+    assert not dialog.loader.isVisible()
 
 
 def test_download_progress_and_windows_explicit_restart(dialog, monkeypatch, tmp_path):
@@ -60,7 +65,6 @@ def test_download_progress_and_windows_explicit_restart(dialog, monkeypatch, tmp
     package.parent.mkdir()
     package.write_bytes(b'installer')
     monkeypatch.setattr(module, 'sys', SimpleNamespace(platform='win32'))
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
     calls = []
     monkeypatch.setattr(module, 'start_windows_installer', lambda path, **kwargs: calls.append((path,kwargs)))
     dialog.quit_requested.connect(lambda: calls.append('quit'))
@@ -104,21 +108,34 @@ def test_linux_install_completion_shows_restart_and_launches_before_quitting(dia
     assert dialog.button.text() == 'Restart application'
     assert not directory.exists()
     calls = []
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
     monkeypatch.setattr(module, 'start_restarted_application', lambda: calls.append('start'))
     dialog.quit_requested.connect(lambda: calls.append('quit'))
     dialog.button.click()
     assert calls == ['start','quit']
 
 
-def test_restart_cancel_or_launch_error_keeps_the_app_open(dialog, monkeypatch):
+def test_keep_current_declines_update_without_download_or_popup(dialog, monkeypatch):
+    def unexpected(*args):
+        pytest.fail('Keeping the current version must not start a download')
+    monkeypatch.setattr(module, 'download_release', unexpected)
+    dialog.on_completed('check',release())
+    assert dialog.keep_button.isVisible()
+    dialog.keep_button.click()
+    assert dialog.phase == 'kept' and dialog.release is None
+    assert 'Keeping the current version' in dialog.label.text()
+    assert dialog.button.text() == 'Check for updates'
+    assert not dialog.keep_button.isVisible()
+    monkeypatch.setattr(module, 'check_update', lambda version: release())
+    dialog.button.click()
+    pump(lambda: not dialog.busy)
+    assert dialog.phase == 'available'
+    assert dialog.keep_button.isVisible()
+
+
+def test_restart_launch_error_keeps_app_open_without_popup(dialog, monkeypatch):
     dialog.show_restart('installed')
     calls = []
     dialog.quit_requested.connect(lambda: calls.append('quit'))
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.No)
-    dialog.button.click()
-    assert not calls and not dialog.busy
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
     def failure():
         raise OSError('Cannot start process')
     monkeypatch.setattr(module, 'sys', SimpleNamespace(platform='linux'))
@@ -129,15 +146,15 @@ def test_restart_cancel_or_launch_error_keeps_the_app_open(dialog, monkeypatch):
     assert 'Could not restart' in dialog.label.text()
 
 
-def test_check_error_is_inline_without_check_button(dialog):
+def test_check_error_is_inline_and_allows_retry(dialog):
     dialog.on_failed('Network unavailable')
-    assert not dialog.button.isVisible()
+    assert dialog.button.isVisible()
+    assert dialog.button.text() == 'Check for updates'
     assert 'Network unavailable' in dialog.label.text()
     assert not dialog.progress_bar.isVisible()
 
 
 def test_download_failure_cannot_offer_restart(dialog, monkeypatch):
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
     def corrupt(*args):
         raise ValueError('SHA-256 verification failed')
     monkeypatch.setattr(module, 'download_release', corrupt)

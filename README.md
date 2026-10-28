@@ -39,17 +39,17 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.6.4)
+## Instalador e atualizações (v0.6.5)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.6.4_amd64.deb
+sudo apt install ./screendepresso_0.6.5_amd64.deb
 ```
 
-Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
+Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Settings → Updates → Check for updates → Download and install**. Todo o fluxo acontece na própria aba, com a opção de manter a versão atual. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições e use **Restart application** ao concluir a atualização. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
 
 O atualizador consulta releases estáveis e rejeita versões iguais ou anteriores. Requer HTTPS e acesso ao GitHub. O SHA-256 verifica integridade em relação ao manifesto servido pelo GitHub; não é uma assinatura independente do publicador. Nenhuma credencial é incluída no instalador.
 
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.4` e `git push origin v0.6.4`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.5` e `git push origin v0.6.5`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.6.4_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.6.5_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -222,3 +222,13 @@ Com escalas diferentes, a composição usa a maior densidade de pixels entre os 
 **Window** abre uma grade de miniaturas. Clique duas vezes ou escolha uma prévia e confirme em **Capture selected window**. As miniaturas usam a captura nativa da janela quando disponível, com fallback para a área visível do desktop. Janelas minimizadas não entram na seleção. A janela escolhida é ativada e sua posição é consultada novamente antes de capturar. Cancelar restaura o editor e preserva todas as abas.
 
 **Region** abre uma sobreposição independente em cada monitor, usando a geometria completa em vez da área de trabalho reduzida pelas barras do sistema. No X11, a sobreposição ignora o reposicionamento do gerenciador de janelas, evitando que o GNOME desloque a imagem para cima do dock. A seleção pode atravessar monitores; **Esc** cancela e libera o mouse e o teclado.
+
+## Atualizações dentro das configurações (0.6.5)
+
+Abra **Settings → Updates** e clique em **Check for updates**. Um indicador de carregamento ocupa o lugar do botão durante a consulta. Se não houver atualização, o botão volta e a mensagem informa que a versão instalada já é a mais recente.
+
+Quando uma versão nova é encontrada, o painel mostra o número e o tamanho do pacote, com **Download and install** ou **Keep current version**. Manter a versão atual encerra a oferta e permite verificar novamente depois. Baixar e instalar inicia o download imediatamente, sem confirmação adicional.
+
+Progresso, erros, instalação e **Restart application** aparecem na mesma aba. Salve suas edições antes de reiniciar; o aviso fica no próprio painel. O Ubuntu continua solicitando autorização do sistema para instalar o pacote, e o instalador Windows continua sendo iniciado no momento do reinício. As validações de origem, tamanho e SHA-256 e a proteção de instância única foram preservadas.
+
+As configurações podem ser fechadas durante a operação. Ao reabrir a aba, o painel mantém o progresso ou o estado de pronto para reiniciar. O comando de atualização na bandeja abre essa mesma aba, sem uma segunda janela de atualização. As opções gerais de salvar/cancelar configurações são substituídas por **Close** enquanto a aba Updates estiver selecionada.

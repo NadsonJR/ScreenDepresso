@@ -68,6 +68,7 @@ class SettingsDialog(QDialog):
         self.resize(550, 300)
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
+        self.tabs = tabs
         layout.addWidget(tabs)
         hotkeys_page = QWidget()
         form = QFormLayout(hotkeys_page)
@@ -95,13 +96,9 @@ class SettingsDialog(QDialog):
         note.setWordWrap(True)
         files_layout.addWidget(note)
         tabs.addTab(files, tr('Files'))
-        updates = QWidget()
-        update_layout = QVBoxLayout(updates)
-        button = QPushButton(tr('Check for updates'))
-        button.setToolTip(tr('Check for updates'))
-        button.clicked.connect(self.check_updates)
-        update_layout.addWidget(button)
-        tabs.addTab(updates, tr('Updates'))
+        self.update_panel = parent.update_panel
+        self.updates_index = tabs.addTab(self.update_panel, tr('Updates'))
+        self.finished.connect(self.release_update_panel)
         language_page = QWidget()
         language_form = QFormLayout(language_page)
         self.language = QComboBox()
@@ -114,7 +111,8 @@ class SettingsDialog(QDialog):
         language_note.setWordWrap(True)
         language_form.addRow(language_note)
         tabs.addTab(language_page, tr('Language'))
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Close)
+        self.buttons = buttons
         for button in buttons.buttons():
             button.setToolTip(button.text().replace('&', ''))
         for index in range(tabs.count()):
@@ -122,9 +120,29 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        tabs.currentChanged.connect(self.sync_buttons)
+        self.sync_buttons(tabs.currentIndex())
 
     def check_updates(self):
-        self.owner.check_updates()
+        self.show_updates()
+        self.update_panel.check_for_updates()
+
+    def show_updates(self):
+        self.tabs.setCurrentIndex(self.updates_index)
+
+    def sync_buttons(self, index):
+        updates = index == self.updates_index
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setVisible(not updates)
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setVisible(not updates)
+        self.buttons.button(QDialogButtonBox.StandardButton.Close).setVisible(updates)
+
+    def release_update_panel(self, result):
+        # The panel belongs to the application, so workers and ready downloads
+        # survive closing Settings and can be shown again without starting over.
+        if self.isAncestorOf(self.update_panel):
+            self.tabs.removeTab(self.tabs.indexOf(self.update_panel))
+            self.update_panel.setParent(self.owner)
+            self.update_panel.hide()
 
     def browse(self):
         directory = QFileDialog.getExistingDirectory(self, tr('Capture directory'), self.directory.text())
