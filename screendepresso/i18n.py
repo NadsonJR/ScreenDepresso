@@ -346,6 +346,8 @@ def translate_tree(root):
             widget.refresh()
         elif widget.objectName() == 'emptyState':
             widget.retranslate()
+    if hasattr(root, 'reflow_toolbars'):
+        root.reflow_toolbars()
 
 
 def set_language(language):

@@ -384,12 +384,17 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self.reflow_toolbars()
+
+    def reflow_toolbars(self):
         if hasattr(self, 'tools'):
             compact = self.width() < 1120
             self.ribbon.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly if compact else Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
             self.tools.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly if self.width() < 900 else Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            width = max([176] + [self.tools.widgetForAction(action).fontMetrics().horizontalAdvance(action.iconText())+64
+                                 for action in self.tool_actions.values()])
             for action in self.tool_actions.values():
-                self.tools.widgetForAction(action).setFixedWidth(56 if self.width() < 900 else 176)
+                self.tools.widgetForAction(action).setFixedWidth(56 if self.width() < 900 else width)
 
     def open_image_file(self):
         path, _ = QFileDialog.getOpenFileName(self, tr('Open image'), str(self.history.directory),
