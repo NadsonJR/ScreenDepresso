@@ -3,6 +3,7 @@ import os
 import select
 import shutil
 import subprocess
+import tempfile
 import pytest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
@@ -15,9 +16,16 @@ def x11(monkeypatch):
     executable = shutil.which('Xvfb')
     if not executable:
         pytest.skip('Xvfb is required for global hotkey integration tests')
-    process = subprocess.Popen([executable, '-displayfd', '1', '-screen', '0', '320x240x24', '-nolisten', 'tcp', '-ac'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # XKB warnings can fill an unread stderr pipe before Xvfb reports its
+    # display number. A file keeps diagnostics without blocking server startup.
+    errors = tempfile.TemporaryFile()
+    process = subprocess.Popen([executable, '-displayfd', '1', '-screen', '0', '320x240x24', '-nolisten', 'tcp', '-ac'], stdout=subprocess.PIPE, stderr=errors)
     try:
-        assert select.select([process.stdout], [], [], 5)[0], 'Xvfb did not start'
+        if not select.select([process.stdout], [], [], 20)[0]:
+            process.terminate()
+            process.wait(timeout=5)
+            errors.seek(0)
+            pytest.fail('Xvfb did not start within 20 seconds:\n'+errors.read().decode(errors='replace')[-4000:])
         number = process.stdout.readline().decode().strip()
         assert number.isdigit()
         monkeypatch.setenv('DISPLAY', ':'+number)
@@ -26,8 +34,10 @@ def x11(monkeypatch):
         yield connection
         connection.close()
     finally:
-        process.terminate()
-        process.wait(timeout=5)
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
+        errors.close()
 
 
 def press(connection, key):
