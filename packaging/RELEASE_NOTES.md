@@ -1,3 +1,12 @@
+## Novidades da versão 0.6.6
+
+- Histórico substituído por **Workspace**, com miniaturas do diretório, atualização automática e ações de duplicar e excluir.
+- Clique duplo abre uma imagem em uma aba; arrastar uma miniatura para o editor insere uma camada editável, com zoom e desfazer/refazer.
+- Limite padrão de 25 imagens, configurável em **Settings → Files** para 25, 50, 75, 100 ou sem limite.
+- Ao salvar imagens ou aplicar um novo limite, as imagens mais antigas são movidas para a lixeira do sistema. Arquivos em subpastas não são alterados e abas abertas preservam a edição.
+- Revisão dos textos em inglês e português BR, incluindo menus, avisos, placeholders e formatação numérica.
+- Catálogo brasileiro do Qt incluído nos instaladores para traduzir diálogos de arquivos e menus de contexto. Nomes de arquivos, fontes e textos do usuário são preservados.
+
 ## Novidades da versão 0.6.5
 
 - Fluxo de atualização incorporado à aba **Settings → Updates**, sem popups extras de consulta, confirmação ou reinício.

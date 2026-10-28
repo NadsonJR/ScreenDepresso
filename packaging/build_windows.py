@@ -7,6 +7,8 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+import os
+from PySide6.QtCore import QLibraryInfo
 import sys
 from PIL import Image, ImageDraw
 
@@ -31,14 +33,18 @@ def main():
     draw.ellipse((98,96,158,156), outline='#fb7185', width=12)
     draw.line([(88,74),(102,50),(154,50),(168,74)], fill='#fb7185', width=14)
     icon.save(build/'screendepresso.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+    translation = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))/'qtbase_pt_BR.qm'
+    if not translation.is_file():
+        raise SystemExit('Qt Brazilian Portuguese translation is missing.')
     run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', '--windowed',
         '--name', 'screendepresso', '--paths', str(ROOT), '--icon', str(build/'screendepresso.ico'),
+        '--add-data', str(translation)+os.pathsep+'screendepresso/translations',
         '--exclude-module', 'Xlib', '--exclude-module', 'PySide6.QtWebEngineCore',
         '--exclude-module', 'PySide6.QtWebEngineWidgets', '--exclude-module', 'PySide6.QtQml',
         '--exclude-module', 'PySide6.QtQuick', str(ROOT/'packaging/entrypoint.py'))
     bundle = ROOT/'dist/screendepresso'
     notices = bundle/'licenses'
-    for name in ('PySide6', 'PySide6-Essentials', 'shiboken6', 'Pillow', 'pyinstaller'):
+    for name in ('PySide6', 'PySide6-Essentials', 'shiboken6', 'Pillow', 'Send2Trash', 'pyinstaller'):
         distribution = importlib.metadata.distribution(name)
         for entry in distribution.files or []:
             if any(word in str(entry).lower() for word in ('license','copying','copyright','notice')):
@@ -52,7 +58,7 @@ def main():
         notices.mkdir(exist_ok=True)
         shutil.copy2(python_license, notices/'Python-LICENSE.txt')
     (bundle/'THIRD_PARTY.txt').write_text(
-        'Includes Python, Qt/PySide6, Shiboken6 and Pillow. License notices are in licenses/.\n'
+        'Includes Python, Qt/PySide6, Shiboken6, Pillow and Send2Trash. License notices are in licenses/.\n'
         'Qt libraries are dynamically linked. Qt sources and licensing: https://code.qt.io/ and https://www.qt.io/licensing/\n'
         'Application source: https://github.com/NadsonJR/ScreenDepresso\n', encoding='utf-8')
     compiler = shutil.which('ISCC.exe') or str(Path(os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'))/'Inno Setup 6/ISCC.exe')

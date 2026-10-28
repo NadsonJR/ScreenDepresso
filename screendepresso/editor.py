@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QWidget, QPlainTextEdit, QApplication
 from .annotations import ARROW_STYLES, BUBBLE_STYLES, bubble_path, draw_arrow, text_document, text_font
 from .blur import shared_blur, sequential_blur
 from .markers import MARKER_STYLES, marker_path, marker_body_hit
+from .workspace import IMAGE_SUFFIXES, read_image
 
 class InlineTextEdit(QPlainTextEdit):
 
@@ -39,9 +40,11 @@ class Canvas(QWidget):
     blur_settings_changed = Signal()
     rectangle_format_changed = Signal()
     marker_style_changed = Signal()
+    drop_failed = Signal(str)
 
     def __init__(self):
         super().__init__()
+        self.setAcceptDrops(True)
         self.base = QImage()
         self.objects = []
         self.selected = None
@@ -691,7 +694,47 @@ class Canvas(QWidget):
             self.selected = None
             self.commit(before)
 
-    def paste_image(self, image=None):
+    @staticmethod
+    def can_drop(mime):
+        if mime.hasImage():
+            return True
+        from pathlib import Path
+        return any(url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in IMAGE_SUFFIXES for url in mime.urls())
+
+    def drop_mime(self, mime, position):
+        image = QImage()
+        if mime.hasImage():
+            data = mime.imageData()
+            image = data.toImage() if hasattr(data, 'toImage') else QImage(data) if isinstance(data, QImage) else QImage()
+        if image.isNull():
+            for url in mime.urls():
+                if url.isLocalFile():
+                    image = read_image(url.toLocalFile())
+                    if not image.isNull():
+                        break
+        if image.isNull():
+            self.drop_failed.emit(tr('Could not open the dropped image.'))
+            return False
+        return self.paste_image(image, position)
+
+    def dragEnterEvent(self, event):
+        if self.can_drop(event.mimeData()):
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        if self.can_drop(event.mimeData()) and self.drop_mime(event.mimeData(), self.image_point(event)):
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def paste_image(self, image=None, position=None):
         self.finish_text()
         image = QApplication.clipboard().image() if image is None else image
         if image.isNull():
@@ -704,6 +747,9 @@ class Canvas(QWidget):
         ratio = min(1.0, self.base.width() / image.width(), self.base.height() / image.height())
         width, height = (max(1, round(image.width() * ratio)), max(1, round(image.height() * ratio)))
         x, y = ((self.base.width() - width) // 2, (self.base.height() - height) // 2)
+        if position is not None:
+            x = max(0, min(round(position.x()-width/2), self.base.width()-width))
+            y = max(0, min(round(position.y()-height/2), self.base.height()-height))
         pasted = image.convertToFormat(QImage.Format.Format_ARGB32)
         pasted.setDevicePixelRatio(1)
         self.objects.append({'kind': 'imagem', 'a': [x, y], 'b': [x + width - 1, y + height - 1], 'image': pasted})

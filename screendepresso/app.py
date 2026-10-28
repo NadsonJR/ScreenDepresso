@@ -1,9 +1,8 @@
 from .i18n import tr, mode_label, set_language, translate_tree
 import os
 import sys
-from datetime import datetime, timedelta
 from pathlib import Path
-from PySide6.QtCore import Qt, QRect, QTimer, QSize, QByteArray, QBuffer, QIODevice
+from PySide6.QtCore import Qt, QRect, QTimer, QSize
 from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
@@ -13,45 +12,10 @@ from .annotations import ARROW_STYLES, BUBBLE_STYLES
 from .markers import MARKER_STYLES
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
-from .platform_support import capture_desktop, crop_desktop, data_directory, global_hotkeys_available
+from .platform_support import capture_desktop, crop_desktop, global_hotkeys_available
 from .capture_ui import Selector, WindowPicker
 from .update_panel import UpdatePanel
-
-class History:
-
-    def __init__(self, directory=None):
-        self.directory = Path(directory) if directory is not None else data_directory()
-        self.directory.mkdir(parents=True, exist_ok=True)
-        self._last_saved_time = None
-
-    def save(self, image):
-        payload = QByteArray()
-        buffer = QBuffer(payload)
-        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        if not image.save(buffer, 'PNG'):
-            raise OSError(tr('Could not save the capture.'))
-        buffer.close()
-        stamp = datetime.now()
-        if self._last_saved_time is not None:
-            stamp = max(stamp, self._last_saved_time+timedelta(microseconds=1))
-        while True:
-            path = self.directory/(stamp.strftime('%Y%m%d-%H%M%S-%f')+'.png')
-            try:
-                stream = path.open('xb')
-            except FileExistsError:
-                stamp += timedelta(microseconds=1)
-                continue
-            try:
-                with stream:
-                    stream.write(bytes(payload))
-            except OSError:
-                path.unlink(missing_ok=True)
-                raise
-            self._last_saved_time = stamp
-            return path
-
-    def entries(self):
-        return sorted(self.directory.glob('*.png'), reverse=True)
+from .workspace import WorkspaceStore as History, WorkspaceView, read_image
 
 def windows():
     if sys.platform == 'win32':
@@ -116,7 +80,7 @@ class MainWindow(QMainWindow):
         self.setPalette(dark_palette())
         self.setStyleSheet(STYLE)
         self.resize(1280, 840)
-        self.history = History(self.settings.directory)
+        self.history = History(self.settings.directory, self.settings.workspace_limit)
         self.tabs = CaptureTabs(self)
         self._active_canvas = None
         self.tool_actions = {}
@@ -243,19 +207,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(options)
         layout.addWidget(self.tabs, 1)
         self.setCentralWidget(container)
-        self.list = QListWidget()
-        self.list.setToolTip(tr('Click a capture to open it in the editor.'))
-        self.list.itemClicked.connect(self.open_history)
-        self.history_dock = QDockWidget(tr('Capture history'), self)
-        self.history_dock.setObjectName('history')
-        self.history_dock.setWidget(self.list)
-        self.history_dock.setMinimumWidth(230)
+        self.workspace = WorkspaceView(self.history, self)
+        self.list = self.workspace.grid
+        self.list.itemDoubleClicked.connect(self.open_history)
+        self.history_dock = QDockWidget(tr('Workspace'), self)
+        self.history_dock.setObjectName('workspace')
+        self.history_dock.setWidget(self.workspace)
+        self.history_dock.setMinimumWidth(320)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.history_dock)
-        self.history_dock.hide()
         history_action = self.history_dock.toggleViewAction()
         history_action.setIcon(toolbar_icon('☷'))
-        history_action.setText(tr('History'))
-        history_action.setToolTip(tr('History'))
+        history_action.setText(tr('Workspace'))
+        history_action.setToolTip(tr('Workspace'))
         ribbon.addAction(history_action)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
         zoom_panel = QWidget()
@@ -365,6 +328,7 @@ class MainWindow(QMainWindow):
                 (canvas.blur_settings_changed, self.display_blur_options),
                 (canvas.rectangle_format_changed, self.display_rectangle_format),
                 (canvas.marker_style_changed, self.display_marker_style),
+                (canvas.drop_failed, lambda message: self.statusBar().showMessage(message, 4000)),
             ]:
                 signal.connect(lambda *args, c=canvas, f=callback: f(*args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
             canvas.setProperty('windowSignalsConnected', True)
@@ -459,6 +423,7 @@ class MainWindow(QMainWindow):
 
     def stop_background_services(self):
         self.hotkeys.stop()
+        self.workspace.stop()
         self.tray.hide()
         if hasattr(self, 'selector'):
             self.selector.close()
@@ -760,35 +725,38 @@ class MainWindow(QMainWindow):
     def show_shortcuts(self):
         self.statusBar().setToolTip(' • '.join((f'{value}: {mode_label(mode)}' for mode, value in self.settings.hotkeys.items())))
 
-    def apply_settings(self, directory, hotkeys, language=None):
+    def apply_settings(self, directory, hotkeys, language=None, workspace_limit=None):
+        workspace_limit = self.settings.workspace_limit if workspace_limit is None else workspace_limit
+        apply_limit = directory != self.settings.directory or workspace_limit != self.settings.workspace_limit
         old = self.settings.hotkeys.copy()
         changed = hotkeys != old
         if changed and global_hotkeys_available():
             self.hotkeys.configure(hotkeys)
         try:
-            self.settings.save(directory, hotkeys, language)
+            self.settings.save(directory, hotkeys, language, workspace_limit)
         except OSError:
             if changed and global_hotkeys_available():
                 self.hotkeys.configure(old)
             raise
         set_language(self.settings.language)
         self.update_panel.render()
+        self.workspace.retranslate()
         self.sync_tool(self.canvas.tool)
         self.tabs.retranslate()
-        self.history = History(directory)
-        self.refresh()
+        self.history = History(directory, self.settings.workspace_limit)
+        if apply_limit:
+            self.history.enforce_limit()
+        self.workspace.set_store(self.history)
         self.show_shortcuts()
 
     def refresh(self):
-        self.list.clear()
-        for path in self.history.entries():
-            self.list.addItem(path.name)
+        self.workspace.refresh()
 
     def open_history(self, item):
         path = self.history.directory / item.text()
-        image = QImage(str(path))
+        image = read_image(path)
         if image.isNull():
-            QMessageBox.warning(self, tr('History'), tr('Could not open this image.'))
+            QMessageBox.warning(self, tr('Workspace'), tr('Could not open this image.'))
             return
         self.tabs.open_image(image, path)
         self.update_dimensions()
@@ -882,7 +850,7 @@ class MainWindow(QMainWindow):
             self.update_dimensions()
             self.refresh()
         except OSError as exc:
-            QMessageBox.warning(self, tr('History'), str(exc))
+            QMessageBox.warning(self, tr('Workspace'), str(exc))
 
     def paste(self):
         if not self.canvas.paste_image():
@@ -899,7 +867,7 @@ class MainWindow(QMainWindow):
         self.canvas.finish_text()
         if self.canvas.image.isNull():
             return False
-        path, _ = QFileDialog.getSaveFileName(self, tr('Save image'), str(self.history.directory / 'captura.png'), 'PNG (*.png);;JPEG (*.jpg *.jpeg)')
+        path, _ = QFileDialog.getSaveFileName(self, tr('Save image'), str(self.history.directory / tr('capture.png')), 'PNG (*.png);;JPEG (*.jpg *.jpeg)', '', QFileDialog.Option.DontUseNativeDialog)
         if path:
             if not Path(path).suffix:
                 path += '.png'
@@ -912,7 +880,7 @@ class MainWindow(QMainWindow):
                     self.history.save(self.canvas.image)
                     self.refresh()
                 except OSError as exc:
-                    QMessageBox.warning(self, tr('History'), str(exc))
+                    QMessageBox.warning(self, tr('Workspace'), str(exc))
                 return True
         return False
 
@@ -965,6 +933,11 @@ def run_application(app, instance):
         QApplication.processEvents()
         if settings.tabs.currentWidget() is not window.update_panel or not window.update_panel.button.isVisible():
             raise RuntimeError('Inline updates panel smoke test failed')
+        from . import i18n
+        set_language('pt_BR')
+        if i18n._translator.native.isEmpty() or settings.workspace_limit.itemText(4) != 'Sem limite':
+            raise RuntimeError('Portuguese Qt translation catalog smoke test failed')
+        set_language('en')
         settings.reject()
         if window.update_panel.parentWidget() is not window:
             raise RuntimeError('Updates panel was not preserved after closing Settings')
@@ -997,7 +970,17 @@ def run_application(app, instance):
         window.tabs.setCurrentIndex(0)
         if window.canvas.image != image:
             raise RuntimeError('First capture was lost after opening another tab')
-        print('Interface, abas, balões, texto, zoom, histórico e clipboard: OK (offscreen)', flush=True)
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix='.workspace-smoke-', dir=window.history.directory) as temporary:
+            store = History(temporary, 0)
+            original = store.save(image)
+            duplicate = store.duplicate(original)
+            if duplicate.read_bytes() != original.read_bytes():
+                raise RuntimeError('Workspace duplicate smoke test failed')
+            store.trash(duplicate)
+            if duplicate.exists() or not original.exists():
+                raise RuntimeError('Workspace trash smoke test failed')
+        print('Interface, tabs, balloons, text, zoom, workspace and clipboard: OK (offscreen)', flush=True)
         QTimer.singleShot(100, window.request_quit)
     sys.exit(app.exec())
 if __name__ == '__main__':

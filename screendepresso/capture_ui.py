@@ -22,7 +22,7 @@ class RegionOverlay(QWidget):
         self.image.setDevicePixelRatio(1)
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setMouseTracking(True)
-        self.setWindowTitle('ScreenDepresso region selection')
+        self.setWindowTitle(tr('Capture region'))
         self.winId()
         self.windowHandle().setScreen(screen)
         self.setGeometry(self.bounds)

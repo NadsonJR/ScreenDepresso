@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import QProcess, QProcessEnvironment, Qt, Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QStackedWidget, QSizePolicy
 from . import __version__
-from .i18n import tr
+from .i18n import tr, format_number
 from .updater import (check_update, download_release, system_environment,
                       start_windows_installer, start_restarted_application)
 
@@ -19,6 +19,7 @@ class UpdatePanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName('updatesPanel')
         self.release = None
         self.package = None
         self.busy = False
@@ -68,7 +69,7 @@ class UpdatePanel(QWidget):
         elif self.phase == 'kept':
             text = tr('Keeping the current version: ')+__version__
         elif self.phase == 'available':
-            text = installed+'\n'+tr('New version: ')+self.release.version+f' • {self.release.size / 1024 / 1024:.1f} MB'
+            text = installed+'\n'+tr('New version: ')+self.release.version+' • '+format_number(self.release.size / 1024 / 1024)+' MB'
         elif self.phase == 'downloading':
             text = tr('Downloading and verifying the package…')
         elif self.phase == 'installing':
@@ -85,7 +86,7 @@ class UpdatePanel(QWidget):
             text = tr('Could not complete the update. Check your connection and try again.')
         else:
             text = installed
-        self.label.setText(text+('\n'+self.error_message if self.error_message else ''))
+        self.label.setText(text+('\n'+tr(self.error_message) if self.error_message else ''))
         primary = ('Restart application' if self.phase in ('ready', 'installed') else
                    'Download and install' if self.release is not None and self.phase in ('available', 'error') else
                    'Check for updates')

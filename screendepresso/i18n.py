@@ -1,7 +1,8 @@
 """English is the default; preferences select English or Brazilian Portuguese."""
-from PySide6.QtCore import QTranslator
+from pathlib import Path
+from PySide6.QtCore import QTranslator, QLibraryInfo, QLocale
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QWidget, QApplication, QLabel, QAbstractButton, QLineEdit, QPlainTextEdit, QTabWidget, QDockWidget, QToolBar
+from PySide6.QtWidgets import QWidget, QApplication, QLabel, QAbstractButton, QLineEdit, QPlainTextEdit, QTabWidget, QDockWidget, QToolBar, QComboBox, QStatusBar
 
 # English source strings and their Brazilian Portuguese translations.
 CATALOG = {
@@ -12,8 +13,7 @@ CATALOG = {
  'Tools': 'Ferramentas', 'Select / move': 'Selecionar / mover', 'Arrow': 'Seta',
  'Rectangle': 'Retângulo', 'Text — drag and type': 'Texto — arraste e digite',
  'Blur outside selection': 'Desfocar fora da seleção', 'Crop selection': 'Recorte',
- 'Delete object (Delete)': 'Excluir objeto (Delete)', 'History': 'Histórico',
- 'Capture history': 'Histórico de capturas', 'Blur strength:': 'Intensidade do desfoque:',
+ 'Delete object (Delete)': 'Excluir objeto (Delete)', 'Blur strength:': 'Intensidade do desfoque:',
  'Arrow • Drag on the image to draw': 'Seta • Arraste na imagem para desenhar',
  'Select • Drag to move; use handles to resize': 'Selecionar • Arraste para mover; use as alças para redimensionar',
  'Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels': 'Texto • Arraste a caixa e digite; Ctrl+Enter confirma; Esc cancela',
@@ -36,7 +36,6 @@ CATALOG = {
  'Hotkeys': 'Atalhos', 'Files': 'Arquivos', 'Updates': 'Atualizações',
  'Directory for new captures and exports:': 'Diretório para novas capturas e exportações:',
  'Browse…': 'Escolher…',
- 'Existing files stay in the previous directory. History displays the selected directory.': 'Arquivos existentes permanecem no diretório anterior. O histórico mostra o diretório escolhido.',
  'Check for updates': 'Verificar atualizações', 'Capture directory': 'Diretório das capturas',
  'Use a combination with Ctrl, Alt, Shift or Meta.': 'Use uma combinação com Ctrl, Alt, Shift ou Meta.',
  'Choose a letter, number, F1–F35, Print or a navigation key.': 'Escolha letra, número, F1–F35, Print ou uma tecla de navegação.',
@@ -178,7 +177,38 @@ CATALOG.update({
  'Keeping the current version: ': 'Mantendo a versão atual: ',
  'Restarting the application…': 'Reiniciando o aplicativo…',
 })
-REVERSE = {value: key for key, value in CATALOG.items()}
+CATALOG.update({
+ 'Workspace': 'Workspace', 'Duplicate': 'Duplicar', 'Delete': 'Excluir', 'Refresh': 'Atualizar',
+ 'No limit': 'Sem limite', 'Maximum images in workspace:': 'Máximo de imagens no workspace:',
+ 'Invalid workspace limit.': 'Limite do workspace inválido.',
+ 'When saving images or applying a new limit, the oldest images are moved to the system trash. Subfolders are not changed.': 'Ao salvar imagens ou aplicar um novo limite, as imagens mais antigas são movidas para a lixeira do sistema. As subpastas não são alteradas.',
+ 'Existing files stay in the previous directory. Workspace shows the selected directory.': 'Os arquivos existentes permanecem no diretório anterior. O workspace mostra o diretório selecionado.',
+ 'This image is no longer available in the workspace.': 'Esta imagem não está mais disponível no workspace.',
+ 'Could not move this image to the system trash.': 'Não foi possível mover esta imagem para a lixeira do sistema.',
+ 'Could not read the workspace: {details}': 'Não foi possível ler o workspace: {details}',
+ 'Could not load the thumbnail.': 'Não foi possível carregar a miniatura.',
+ 'Created a copy of {name}.': 'Uma cópia de {name} foi criada.',
+ 'Could not duplicate the image: {details}': 'Não foi possível duplicar a imagem: {details}',
+ 'Moved {name} to the system trash.': '{name} foi movida para a lixeira do sistema.',
+ 'Could not delete the image: {details}': 'Não foi possível excluir a imagem: {details}',
+ 'Duplicate selected image (Ctrl+D)': 'Duplicar imagem selecionada (Ctrl+D)',
+ 'Move selected image to the system trash (Delete)': 'Mover imagem selecionada para a lixeira do sistema (Delete)',
+ 'Refresh workspace thumbnails': 'Atualizar miniaturas do workspace',
+ 'Double-click to open an image. Drag a thumbnail onto the editor to add it as an editable image.': 'Clique duas vezes para abrir uma imagem. Arraste uma miniatura para o editor para adicioná-la como imagem editável.',
+ 'Images: {count} • Limit: {limit}': 'Imagens: {count} • Limite: {limit}',
+ 'Could not apply the workspace limit: {details}': 'Não foi possível aplicar o limite do workspace: {details}',
+ 'The limit will be applied when an image is saved.': 'O limite será aplicado ao salvar uma imagem.',
+ 'Could not open the dropped image.': 'Não foi possível abrir a imagem arrastada.',
+ 'capture.png': 'captura.png',
+ '&Look in:': '&Examinar:', 'Files of &type:': 'Arquivos do &tipo:',
+ 'File &name:': '&Nome do arquivo:', 'Show hidden files': 'Mostrar arquivos ocultos',
+ 'Show &hidden files': 'Mostrar arquivos &ocultos', '&New Folder': '&Nova pasta',
+ '&Rename': '&Renomear', '&Delete': 'E&xcluir', 'Show Date Modified': 'Mostrar data de modificação',
+ 'Show Size': 'Mostrar tamanho', 'Show Type': 'Mostrar tipo',
+})
+REVERSE = {}
+for english, translated in CATALOG.items():
+    REVERSE.setdefault(translated, english)
 _language = 'en'
 _translator = None
 
@@ -192,12 +222,29 @@ def mode_label(mode):
     return tr({'tela': 'Full screen', 'janela': 'Window', 'região': 'Region'}[mode])
 
 
+def format_number(value, decimals=1):
+    return QLocale('pt_BR' if _language == 'pt_BR' else 'en_US').toString(float(value), 'f', decimals)
+
+
 class NativeTranslator(QTranslator):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.native = QTranslator(self)
+        bundled = Path(__file__).parent/'translations/qtbase_pt_BR.qm'
+        if not self.native.load(str(bundled)):
+            self.native.load('qtbase_pt_BR', QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))
+
     def isEmpty(self):
         return False
 
     def translate(self, context, sourceText, disambiguation=None, n=-1):
-        return tr(sourceText)
+        if sourceText in CATALOG or sourceText in REVERSE:
+            return tr(sourceText)
+        if _language == 'pt_BR':
+            translated = self.native.translate(context, sourceText, disambiguation, n)
+            if translated:
+                return translated
+        return sourceText
 
 
 def translate_tree(root):
@@ -221,11 +268,26 @@ def translate_tree(root):
         for index in range(tabs.count()):
             tabs.setTabText(index, tr(tabs.tabText(index)))
             tabs.setTabToolTip(index, tr(tabs.tabToolTip(index)))
+    for widget in root.findChildren(QLineEdit)+root.findChildren(QPlainTextEdit):
+        widget.setPlaceholderText(tr(widget.placeholderText()))
+    for combo in root.findChildren(QComboBox):
+        if combo.property('translateItems'):
+            for index in range(combo.count()):
+                combo.setItemText(index, tr(combo.itemText(index)))
+    for bar in root.findChildren(QStatusBar):
+        if bar.currentMessage():
+            bar.showMessage(tr(bar.currentMessage()))
+    for widget in root.findChildren(QWidget):
+        if widget.objectName() == 'workspaceView':
+            widget.retranslate()
+        elif widget.objectName() == 'updatesPanel':
+            widget.render()
 
 
 def set_language(language):
     global _language, _translator
     _language = language if language in ('en', 'pt_BR') else 'en'
+    QLocale.setDefault(QLocale('pt_BR' if _language == 'pt_BR' else 'en_US'))
     app = QApplication.instance()
     if app is not None:
         if _translator is None:

@@ -11,7 +11,28 @@ from .i18n import tr
 class CaptureScrollArea(QScrollArea):
     def __init__(self):
         super().__init__()
+        self.setAcceptDrops(True)
         self.wheel_steps = 0.0
+
+    def dragEnterEvent(self, event):
+        if self.widget().can_drop(event.mimeData()):
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        canvas = self.widget()
+        point = canvas.mapFrom(self.viewport(), event.position().toPoint())
+        point = QPointF(point)/canvas.zoom
+        if canvas.can_drop(event.mimeData()) and canvas.drop_mime(event.mimeData(), point):
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
 
     def set_zoom(self, percent, anchor=None):
         canvas = self.widget()

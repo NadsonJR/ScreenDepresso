@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from screendepresso import __version__
+from PySide6.QtCore import QLibraryInfo
 
 
 def run(*args):
@@ -24,8 +25,12 @@ def main():
     if not re_version(__version__):
         raise SystemExit('Version must have format X.Y.Z.')
     output = ROOT / 'dist'
+    translation = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))/'qtbase_pt_BR.qm'
+    if not translation.is_file():
+        raise SystemExit('Qt Brazilian Portuguese translation is missing.')
     run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir',
         '--name', 'screendepresso', '--paths', str(ROOT),
+        '--add-data', str(translation)+os.pathsep+'screendepresso/translations',
         '--hidden-import', 'Xlib.ext', '--collect-submodules', 'Xlib',
         '--exclude-module', 'PySide6.QtWebEngineCore', '--exclude-module', 'PySide6.QtWebEngineWidgets',
         '--exclude-module', 'PySide6.QtQml', '--exclude-module', 'PySide6.QtQuick',
@@ -49,11 +54,11 @@ def main():
     docs.mkdir(parents=True)
     shutil.copy2(ROOT / 'README.md', docs)
     (docs / 'THIRD_PARTY.txt').write_text(
-        'Contains Python, Qt/PySide6, Shiboken6, Pillow, python-xlib and six.\n'
+        'Contains Python, Qt/PySide6, Shiboken6, Pillow, Send2Trash, python-xlib and six.\n'
         'Their license notices are preserved in licenses/. Qt libraries are dynamically linked.\n'
         'Qt/PySide6 upstream sources and license information: https://code.qt.io/ and https://www.qt.io/licensing/\n'
         'Application source and build instructions: https://github.com/NadsonJR/ScreenDepresso\n')
-    for name in ('PySide6', 'PySide6-Essentials', 'shiboken6', 'Pillow', 'python-xlib', 'six', 'pyinstaller'):
+    for name in ('PySide6', 'PySide6-Essentials', 'shiboken6', 'Pillow', 'Send2Trash', 'python-xlib', 'six', 'pyinstaller'):
         dist = importlib.metadata.distribution(name)
         for entry in dist.files or []:
             if any(word in str(entry).lower() for word in ('license', 'copying', 'copyright', 'notice')):
@@ -80,7 +85,7 @@ def main():
         f'Depends: {dependencies}\nInstalled-Size: {size}\n'
         'Homepage: https://github.com/NadsonJR/ScreenDepresso\n'
         'Description: Screenshot capture and annotation for Linux X11\n'
-        ' Includes the Python runtime, editor, history and release updater.\n')
+        ' Includes the Python runtime, editor, workspace and release updater.\n')
     for directory, subdirs, files in os.walk(stage):
         Path(directory).chmod(0o755)
         for filename in files:

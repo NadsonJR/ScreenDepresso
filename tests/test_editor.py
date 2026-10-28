@@ -296,7 +296,7 @@ def test_image_paste_during_text_edit_commits_both_layers():
 
 def test_history_never_overwrites_when_clock_has_low_precision(tmp_path, monkeypatch):
     from datetime import datetime as RealDatetime
-    from screendepresso import app as module
+    from screendepresso import workspace as module
     frozen = RealDatetime(2026, 10, 27, 12, 30)
     class FixedClock:
         @staticmethod

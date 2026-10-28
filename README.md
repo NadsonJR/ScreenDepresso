@@ -23,13 +23,13 @@ Com `uv`, use `uv sync --frozen --extra dev` e `uv run screendepresso`.
 - Editor: escolha a ferramenta e arraste na imagem. Texto pede o conteúdo ao clicar. Use Desfazer para reverter operações.
 - Copiar envia a versão editada para a área de transferência. Mantenha o aplicativo aberto para servir os dados da área de transferência no X11.
 - Salvar exporta PNG/JPEG e adiciona a versão editada ao histórico.
-- Capturas originais são persistidas automaticamente em `$XDG_DATA_HOME/screendepresso`, ou `~/.local/share/screendepresso`. Cada captura abre em uma aba própria. Clique no histórico para abrir uma imagem em outra aba ou voltar à aba existente, preservando as edições.
+- Capturas originais são persistidas automaticamente em `$XDG_DATA_HOME/screendepresso`, ou `~/.local/share/screendepresso`. Cada captura abre em uma aba própria. Clique duas vezes em uma miniatura do workspace para abrir uma imagem em outra aba ou voltar à aba existente, preservando as edições.
 
 ## Limitações atuais
 
 Captura de janela copia sua área visível da tela. Após a escolha por miniatura, o aplicativo tenta trazê-la para a frente. Janelas sempre acima e conteúdo protegido ainda podem aparecer ou impedir a captura. No X11, a captura usa a área do cliente, sem a decoração do gerenciador de janelas. A versão inicial não captura conteúdo oculto ou minimizado. Atalhos em conflito são informados na barra de status. O ícone de bandeja depende do suporte do GNOME (extensão AppIndicator); a janela e os atalhos não dependem dele. Ao fechar a janela, escolha minimizar em segundo plano, encerrar ou cancelar.
 
-O histórico é local e sem expiração automática; pode conter dados sensíveis. Desfoque é um efeito visual, não uma garantia de remoção de informação sensível. Wayland não é suportado nesta versão. Escala mista entre monitores ainda precisa de validação em hardware real.
+O workspace é local e pode conter dados sensíveis. O limite padrão é de 25 imagens; imagens mais antigas são movidas para a lixeira ao salvar novas imagens ou aplicar outro limite nas configurações. Desfoque é um efeito visual, não uma garantia de remoção de informação sensível. Wayland não é suportado nesta versão. Escala mista entre monitores ainda precisa de validação em hardware real.
 
 ## Testes
 
@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.6.5)
+## Instalador e atualizações (v0.6.6)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.6.5_amd64.deb
+sudo apt install ./screendepresso_0.6.6_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Settings → Updates → Check for updates → Download and install**. Todo o fluxo acontece na própria aba, com a opção de manter a versão atual. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições e use **Restart application** ao concluir a atualização. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.5` e `git push origin v0.6.5`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.6` e `git push origin v0.6.6`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.6.5_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.6.6_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -232,3 +232,15 @@ Quando uma versão nova é encontrada, o painel mostra o número e o tamanho do 
 Progresso, erros, instalação e **Restart application** aparecem na mesma aba. Salve suas edições antes de reiniciar; o aviso fica no próprio painel. O Ubuntu continua solicitando autorização do sistema para instalar o pacote, e o instalador Windows continua sendo iniciado no momento do reinício. As validações de origem, tamanho e SHA-256 e a proteção de instância única foram preservadas.
 
 As configurações podem ser fechadas durante a operação. Ao reabrir a aba, o painel mantém o progresso ou o estado de pronto para reiniciar. O comando de atualização na bandeja abre essa mesma aba, sem uma segunda janela de atualização. As opções gerais de salvar/cancelar configurações são substituídas por **Close** enquanto a aba Updates estiver selecionada.
+
+## Workspace e idiomas (0.6.6)
+
+O painel **Workspace** substitui o histórico e mostra miniaturas das imagens no diretório configurado. Um clique seleciona a imagem para as ações; um clique duplo abre ou restaura sua aba. **Duplicate** (**Ctrl+D**) cria uma cópia independente no mesmo diretório; **Delete** move a imagem selecionada para a lixeira do sistema. Abas abertas preservam seus pixels e edições mesmo quando o arquivo original sai do workspace.
+
+Arraste uma miniatura para a imagem em edição para adicioná-la como uma camada que pode ser movida, redimensionada e desfeita/refeita. O arraste copia a imagem, preservando o arquivo de origem. Também funciona com zoom e sobre a área vazia do editor. Miniaturas são carregadas em pequenos lotes; mudanças no diretório são observadas automaticamente e **Refresh** permite atualizar manualmente.
+
+Em **Settings → Files**, escolha **25** (padrão), **50**, **75**, **100** ou **No limit**. O limite conta imagens PNG, JPEG, WebP, BMP, GIF e TIFF no próprio diretório, incluindo cópias e imagens externas com esses formatos. Ao salvar/duplicar uma imagem ou aplicar um novo limite/diretório, as mais antigas são movidas para a lixeira, mantendo o limite escolhido. A data de modificação define a ordem. Subpastas, arquivos de outros tipos e links simbólicos não são removidos automaticamente.
+
+Diretórios existentes não são reduzidos apenas ao iniciar ou atualizar o aplicativo: se já excederem o limite, o painel informa que ele será aplicado no próximo salvamento. Para preservar todos os arquivos no diretório, selecione **No limit** antes de salvar novas imagens. Se a lixeira estiver indisponível, os arquivos são preservados e o painel informa que não foi possível aplicar o limite. Não há fallback para exclusão permanente.
+
+A interface inclui traduções revisadas em inglês e português BR, com o catálogo brasileiro do Qt incluído nos instaladores para diálogos de arquivos e menus de contexto. Trocar o idioma atualiza os controles, status e placeholders sem traduzir nomes de arquivos, fontes nem o conteúdo escrito nas imagens. Quantidades decimais usam o formato do idioma selecionado. Mensagens externas do sistema operacional continuam sujeitas ao idioma do sistema.

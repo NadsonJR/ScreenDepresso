@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from .workspace import WORKSPACE_LIMITS
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget, QWidget, QKeySequenceEdit, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QLabel, QMessageBox, QComboBox
@@ -31,6 +32,7 @@ class Settings:
         self.directory = str(data_directory())
         self.hotkeys = DEFAULT_HOTKEYS.copy()
         self.language = 'en'
+        self.workspace_limit = 25
         try:
             data = json.loads(self.path.read_text())
             shortcuts = data['hotkeys']
@@ -40,24 +42,30 @@ class Settings:
                 raise ValueError(tr('Invalid directory'))
             self.directory, self.hotkeys = (data['directory'], shortcuts)
             self.language = data.get('language', 'en') if data.get('language', 'en') in ('en', 'pt_BR') else 'en'
+            limit = data.get('workspace_limit', 25)
+            self.workspace_limit = limit if type(limit) is int and limit in WORKSPACE_LIMITS else 25
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             pass
 
-    def save(self, directory, hotkeys, language=None):
+    def save(self, directory, hotkeys, language=None, workspace_limit=None):
         language = self.language if language is None else language
         if language not in ('en', 'pt_BR'):
             raise ValueError(tr('Unsupported language'))
+        workspace_limit = self.workspace_limit if workspace_limit is None else workspace_limit
+        if type(workspace_limit) is not int or workspace_limit not in WORKSPACE_LIMITS:
+            raise ValueError(tr('Invalid workspace limit.'))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(dir=self.path.parent)
         try:
             with os.fdopen(fd, 'w') as stream:
-                json.dump({'directory': directory, 'hotkeys': hotkeys, 'language': language}, stream, ensure_ascii=False)
+                json.dump({'directory': directory, 'hotkeys': hotkeys, 'language': language, 'workspace_limit': workspace_limit}, stream, ensure_ascii=False)
             os.replace(temporary, self.path)
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
         self.directory, self.hotkeys = (directory, hotkeys.copy())
         self.language = language
+        self.workspace_limit = workspace_limit
 
 class SettingsDialog(QDialog):
 
@@ -92,7 +100,19 @@ class SettingsDialog(QDialog):
         browse.clicked.connect(self.browse)
         row.addWidget(browse)
         files_layout.addLayout(row)
-        note = QLabel(tr('Existing files stay in the previous directory. History displays the selected directory.'))
+        self.workspace_limit = QComboBox()
+        self.workspace_limit.setProperty('translateItems', True)
+        self.workspace_limit.setToolTip(tr('Maximum images in workspace:'))
+        for limit in WORKSPACE_LIMITS:
+            self.workspace_limit.addItem(str(limit) if limit else tr('No limit'), limit)
+        self.workspace_limit.setCurrentIndex(self.workspace_limit.findData(parent.settings.workspace_limit))
+        limit_row = QFormLayout()
+        limit_row.addRow(tr('Maximum images in workspace:'), self.workspace_limit)
+        files_layout.addLayout(limit_row)
+        retention = QLabel(tr('When saving images or applying a new limit, the oldest images are moved to the system trash. Subfolders are not changed.'))
+        retention.setWordWrap(True)
+        files_layout.addWidget(retention)
+        note = QLabel(tr('Existing files stay in the previous directory. Workspace shows the selected directory.'))
         note.setWordWrap(True)
         files_layout.addWidget(note)
         tabs.addTab(files, tr('Files'))
@@ -145,7 +165,7 @@ class SettingsDialog(QDialog):
             self.update_panel.hide()
 
     def browse(self):
-        directory = QFileDialog.getExistingDirectory(self, tr('Capture directory'), self.directory.text())
+        directory = QFileDialog.getExistingDirectory(self, tr('Capture directory'), self.directory.text(), QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog)
         if directory:
             self.directory.setText(directory)
 
@@ -161,7 +181,7 @@ class SettingsDialog(QDialog):
             directory.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryFile(dir=directory):
                 pass
-            self.owner.apply_settings(str(directory), hotkeys, self.language.currentData())
+            self.owner.apply_settings(str(directory), hotkeys, self.language.currentData(), self.workspace_limit.currentData())
         except (ValueError, OSError, RuntimeError) as exc:
             QMessageBox.warning(self, tr('Settings'), str(exc))
             return
