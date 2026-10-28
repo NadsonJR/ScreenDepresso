@@ -46,7 +46,7 @@ def _get(key):
 
 def _compute(image, radius):
     global _cache_bytes
-    result = blurred_image(image, radius).convertToFormat(QImage.Format.Format_ARGB32)
+    result = blurred_image(image, radius)
     key = _key(image, radius)
     with _lock:
         previous = _cache.pop(key, None)
@@ -119,7 +119,9 @@ def shared_blur(image, regions):
     for rect, radius in regions:
         painter.drawImage(rect, image, rect)
     painter.end()
-    return result
+    # Match 0.7.1: restore regions in RGBA before converting the final image.
+    # Converting earlier changes the hidden RGB of fully transparent pixels.
+    return result.convertToFormat(QImage.Format.Format_ARGB32)
 
 
 def sequential_blur(image, rect, radius):

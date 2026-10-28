@@ -23,6 +23,11 @@ def pattern(width=160, height=120, alpha=False):
     for x in range(0,width,8):
         p.fillRect(x,0,8,height,QColor((x*7)%256,(x*13)%256,(x*3)%256,(x*3)%256 if alpha else 255))
     p.end()
+    if alpha:
+        # PNGs can retain nonzero RGB even where alpha is zero. Cover both
+        # the restored region and the blurred background in the export oracle.
+        image.setPixelColor(12,30,QColor(150,77,201,0))
+        image.setPixelColor(140,20,QColor(150,77,201,0))
     return image
 
 

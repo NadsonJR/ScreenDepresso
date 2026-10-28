@@ -22,11 +22,11 @@ Linux x86_64, Python 3.12, Pillow e Qt das dependências travadas, execução of
 
 | Resolução | Arraste 0.7.1 | Arraste 0.7.2, cache pronto | Primeira pintura 0.7.2 | Camada exata pronta | Pico de memória |
 |---|---:|---:|---:|---:|---:|
-| 3840x2160 | 401.7 ms | 1.43 ms | 35.0 ms | 0.42 s | 267 → 208 MiB |
-| 7680x4320 | 1986.9 ms | 1.64 ms | 67.1 ms | 1.88 s | 932 → 682 MiB |
-| 12000x8000 | 5707.7 ms | 1.73 ms | 187.4 ms | 5.38 s | 2610 → 1882 MiB |
+| 3840x2160 | 401.7 ms | 1.45 ms | 33.0 ms | 0.43 s | 267 → 208 MiB |
+| 7680x4320 | 1986.9 ms | 1.06 ms | 79.2 ms | 1.61 s | 932 → 683 MiB |
+| 12000x8000 | 5707.7 ms | 1.98 ms | 183.2 ms | 4.72 s | 2610 → 1882 MiB |
 
-O modo legado foi medido separadamente em 8K, com uma camada e uma região em arraste: **3664.2 ms → 3.05 ms** por quadro após o cache ficar pronto. Alterar um objeto anterior a várias camadas legadas pode exigir recompor os prefixos; o modo compartilhado oferece o caso de reutilização mais simples.
+O modo legado foi medido separadamente em 8K, com uma camada e uma região em arraste: **3664.2 ms → 2.95 ms** por quadro após o cache ficar pronto. Alterar um objeto anterior a várias camadas legadas pode exigir recompor os prefixos; o modo compartilhado oferece o caso de reutilização mais simples.
 
 Estes números medem o renderizador de edição em memória. Não são FPS de monitor, latência completa de mouse/Qt, tempo de captura, codificação de PNG/JPEG ou escrita em disco. São amostras de um ambiente compartilhado, sem promessa de tempos iguais em outro computador. O primeiro cálculo Gaussiano continua proporcional à resolução e pode levar vários segundos; a diferença é que a edição não o repete a cada movimento, e o trabalho completo fica em segundo plano. Exportar antes de ele terminar ainda pode aguardar o cálculo. A prévia temporária não tem a mesma definição da camada final.
 
