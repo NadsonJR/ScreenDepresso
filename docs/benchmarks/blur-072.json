@@ -1,0 +1,112 @@
+{
+  "environment": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "python": "3.12.14",
+  "viewport": "1280x720",
+  "zoom": "100%",
+  "radius": 14,
+  "notes": "Offscreen synthetic stripes, three-frame medians, separate process per resolution; no file I/O or physical monitor refresh.",
+  "baseline_shared": [
+    {
+      "version": "0.7.1",
+      "resolution": "3840x2160",
+      "mode": "shared",
+      "samples": 3,
+      "first_paint_ms": 441.294,
+      "full_ready_ms": 441.361,
+      "idle_paint_ms": 438.364,
+      "drag_paint_ms": 401.674,
+      "warm_export_ms": 405.044,
+      "peak_rss_mib": 267.0
+    },
+    {
+      "version": "0.7.1",
+      "resolution": "7680x4320",
+      "mode": "shared",
+      "samples": 3,
+      "first_paint_ms": 1856.338,
+      "full_ready_ms": 1856.416,
+      "idle_paint_ms": 1990.962,
+      "drag_paint_ms": 1986.883,
+      "warm_export_ms": 2120.643,
+      "peak_rss_mib": 931.5
+    },
+    {
+      "version": "0.7.1",
+      "resolution": "12000x8000",
+      "mode": "shared",
+      "samples": 3,
+      "first_paint_ms": 6992.51,
+      "full_ready_ms": 6992.613,
+      "idle_paint_ms": 5480.889,
+      "drag_paint_ms": 5707.664,
+      "warm_export_ms": 5748.12,
+      "peak_rss_mib": 2610.1
+    }
+  ],
+  "optimized_shared": [
+    {
+      "version": "0.7.2",
+      "resolution": "3840x2160",
+      "mode": "shared",
+      "samples": 3,
+      "first_paint_ms": 35.039,
+      "full_ready_ms": 421.6,
+      "idle_paint_ms": 1.493,
+      "drag_paint_ms": 1.434,
+      "warm_export_ms": 26.561,
+      "peak_rss_mib": 208.4
+    },
+    {
+      "version": "0.7.2",
+      "resolution": "7680x4320",
+      "mode": "shared",
+      "samples": 3,
+      "first_paint_ms": 67.101,
+      "full_ready_ms": 1883.622,
+      "idle_paint_ms": 1.309,
+      "drag_paint_ms": 1.638,
+      "warm_export_ms": 51.528,
+      "peak_rss_mib": 682.2
+    },
+    {
+      "version": "0.7.2",
+      "resolution": "12000x8000",
+      "mode": "shared",
+      "samples": 3,
+      "first_paint_ms": 187.41,
+      "full_ready_ms": 5382.141,
+      "idle_paint_ms": 1.778,
+      "drag_paint_ms": 1.728,
+      "warm_export_ms": 162.145,
+      "peak_rss_mib": 1882.2
+    }
+  ],
+  "baseline_legacy": [
+    {
+      "version": "0.7.1",
+      "resolution": "7680x4320",
+      "mode": "sequential",
+      "samples": 3,
+      "first_paint_ms": 1923.274,
+      "full_ready_ms": 1923.346,
+      "idle_paint_ms": 1905.878,
+      "drag_paint_ms": 3664.25,
+      "warm_export_ms": 1814.093,
+      "peak_rss_mib": 939.2
+    }
+  ],
+  "optimized_legacy": [
+    {
+      "version": "0.7.2",
+      "resolution": "7680x4320",
+      "mode": "sequential",
+      "samples": 3,
+      "first_paint_ms": 72.267,
+      "full_ready_ms": 1641.888,
+      "idle_paint_ms": 2.938,
+      "drag_paint_ms": 3.052,
+      "warm_export_ms": 125.63,
+      "peak_rss_mib": 757.4
+    }
+  ]
+}

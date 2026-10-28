@@ -248,6 +248,16 @@ CATALOG.update({
  'The empty editor offers capture, open, paste and image dropping. Compact windows use smaller toolbars and scrollable properties.': 'O editor vazio oferece captura, abertura, colagem e arraste de imagens. Janelas compactas usam barras menores e propriedades com rolagem.',
  'Version 0.7.0 remains available as a separate download if you prefer the previous design. Reinstall it manually to roll back.': 'A versão 0.7.0 continua disponível em um download separado para quem prefere o design anterior. Reinstale-a manualmente para voltar.',
 })
+CATALOG.update({
+ 'Preparing full-resolution blur…': 'Preparando desfoque em resolução completa…',
+ 'Could not render the full-resolution blur preview.': 'Não foi possível renderizar a prévia do desfoque em resolução completa.',
+})
+CATALOG.update({
+ 'Large-image blur is prepared in the background and reused while moving clear regions. A lightweight preview is shown until the full-resolution layer is ready.': 'O desfoque de imagens grandes é preparado em segundo plano e reutilizado ao mover áreas nítidas. Uma prévia leve é exibida até a camada em resolução completa ficar pronta.',
+ 'Copy and save always use the original resolution and Gaussian filter, never the temporary preview. They may wait for the full layer to finish.': 'Copiar e salvar sempre usam a resolução original e o filtro Gaussiano, nunca a prévia temporária. Essas ações podem aguardar a camada completa.',
+ 'The blur cache is shared across tabs and limited in memory. Transparency, overlapping clear areas, undo/redo and legacy compositing are preserved.': 'O cache de desfoque é compartilhado entre abas e limitado em memória. Transparência, áreas nítidas sobrepostas, desfazer/refazer e composição legada foram preservados.',
+ 'Version 0.7.1 replaces the old 0.7.0 installers. The old source tag remains in the repository history.': 'A versão 0.7.1 substitui os antigos instaladores da 0.7.0. A tag de código antiga permanece no histórico do repositório.',
+})
 REVERSE = {}
 for english, translated in CATALOG.items():
     REVERSE.setdefault(translated, english)

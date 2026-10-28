@@ -6,9 +6,9 @@ from .i18n import tr
 def installed_release_notes():
     return tr('What’s new in version {version}').format(version=__version__) + '\n\n' + '\n\n'.join(
         '• ' + text for text in (
-            tr('Updated dark interface following the ScreenDepresso visual identity guide, with consistent colors, typography and icons.'),
-            tr('Labeled tools and a contextual properties bar preserve existing annotation controls, shortcuts and continuous drawing.'),
-            tr('The empty editor offers capture, open, paste and image dropping. Compact windows use smaller toolbars and scrollable properties.'),
-            tr('Version 0.7.0 remains available as a separate download if you prefer the previous design. Reinstall it manually to roll back.'),
+            tr('Large-image blur is prepared in the background and reused while moving clear regions. A lightweight preview is shown until the full-resolution layer is ready.'),
+            tr('Copy and save always use the original resolution and Gaussian filter, never the temporary preview. They may wait for the full layer to finish.'),
+            tr('The blur cache is shared across tabs and limited in memory. Transparency, overlapping clear areas, undo/redo and legacy compositing are preserved.'),
+            tr('Version 0.7.1 replaces the old 0.7.0 installers. The old source tag remains in the repository history.'),
         )
     )

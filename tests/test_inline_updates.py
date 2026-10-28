@@ -164,7 +164,7 @@ def test_installed_release_notes_stay_inline_offline_and_translate(window, monke
     panel.notes_button.click()
     assert panel.notes_view.isVisible()
     assert __version__ in panel.notes_view.toPlainText()
-    assert 'Updated dark interface' in panel.notes_view.toPlainText()
+    assert 'Large-image blur is prepared' in panel.notes_view.toPlainText()
     # The notes describe the installed version, even when an update is offered.
     offered = Release('99.0.0', 'package.exe', 'https://github.com/package.exe', 'a'*64, 100)
     panel.on_completed('check', offered)
@@ -173,7 +173,7 @@ def test_installed_release_notes_stay_inline_offline_and_translate(window, monke
     window.apply_settings(window.settings.directory, window.settings.hotkeys, 'pt_BR')
     assert panel.notes_button.text() == 'Notas de atualização'
     assert f'Novidades da versão {__version__}' in panel.notes_view.toPlainText()
-    assert 'Interface escura renovada' in panel.notes_view.toPlainText()
+    assert 'O desfoque de imagens grandes é preparado' in panel.notes_view.toPlainText()
     settings.reject()
     window.open_settings(updates=True)
     assert panel.notes_view.isVisible()

@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.7.1)
+## Instalador e atualizações (v0.7.2)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.7.1_amd64.deb
+sudo apt install ./screendepresso_0.7.2_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Settings → Updates → Check for updates → Download and install**. Todo o fluxo acontece na própria aba, com a opção de manter a versão atual. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições e use **Restart application** ao concluir a atualização. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.7.1` e `git push origin v0.7.1`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.7.2` e `git push origin v0.7.2`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.7.1_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.7.2_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -273,7 +273,7 @@ O atualizador escolhe o DMG da arquitetura em execução e verifica origem, tama
 
 Os testes automatizados do macOS não concedem permissão de gravação de tela: a validação real de capturas, atalhos físicos, múltiplos monitores e permissões deve ser feita numa sessão de usuário no Mac.
 
-## Identidade visual e retorno ao design anterior (0.7.1)
+## Identidade visual (0.7.1)
 
 A 0.7.1 aplica o guia de identidade visual: paleta escura, fonte de interface do sistema, ícones desenhados com traços consistentes, barra superior agrupada, ferramentas com rótulos, propriedades contextuais e rodapé legível. Botões e inputs têm foco visível. Os estados ativos usam uma variação mais escura do azul para manter contraste AA nos rótulos. O desenho dos controles nativos da janela é preservado em cada plataforma.
 
@@ -281,11 +281,18 @@ A barra contextual expõe apenas propriedades já suportadas pelas ferramentas a
 
 Sem imagem, o editor oferece **Capture screen**, **Open image** e **Paste image**, além de aceitar arraste. Abrir uma imagem não a move nem a duplica no Workspace. Em janelas compactas, as barras usam ícones com tooltips e o overflow nativo do Qt; a barra contextual admite rolagem horizontal. A interface respeita escalonamento HiDPI/Retina e usa símbolos nativos de atalhos no macOS.
 
-### Downloads separados
+### Versão substituída
 
-- [0.7.1 — novo design](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.1)
-- [0.7.0 — design anterior, mantido para rollback](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.0)
+Os instaladores da 0.7.0 foram substituídos pela [0.7.1](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.1), conforme solicitado. A página da 0.7.0 agora informa a substituição; sua tag de código foi preservada no histórico, sem renomear binários de outra versão.
 
-Cada release tem seus próprios instaladores Linux, Windows e macOS Intel/Apple Silicon, manifesto e checksums. A 0.7.1 não substitui os arquivos publicados da 0.7.0. O atualizador oferece a versão mais recente; não faz downgrade automaticamente.
+## Desfoque em imagens grandes (0.7.2)
 
-Para voltar: salve/exporte as edições abertas, encerre o aplicativo, baixe o instalador da **0.7.0** correspondente ao seu sistema e reinstale-o. No Ubuntu, use `sudo apt install --allow-downgrades ./screendepresso_0.7.0_amd64.deb`; no Windows execute o instalador 0.7.0; no macOS substitua o app em Aplicativos pelo do DMG 0.7.0. As versões usam os mesmos diretórios e configurações compatíveis; abas e objetos não exportados não sobrevivem ao encerramento. Não é necessário excluir o Workspace nem as configurações para trocar de versão.
+O editor reutiliza a camada de desfoque enquanto você desenha, move ou redimensiona áreas nítidas. A tela pinta a área visível diretamente, evitando criar uma imagem completa a cada movimento. O cálculo de resolução completa é feito em segundo plano, com apenas um trabalhador e cancelamento de solicitações que ainda não iniciaram quando surge uma mais recente.
+
+Enquanto o cálculo termina, uma prévia temporária de até 262 mil pixels mantém a edição disponível; as áreas nítidas e anotações continuam sendo desenhadas na resolução original. O rodapé mostra **Preparing full-resolution blur…**. A prévia temporária é substituída automaticamente pela camada exata. Não há novo popup ou ajuste obrigatório.
+
+**Copiar e salvar sempre usam a resolução completa e o mesmo filtro Gaussiano anterior.** Se acionados antes do cálculo terminar, aguardam a camada completa; a prévia reduzida nunca é exportada. Copiar/salvar também evitam renderizar a mesma imagem várias vezes por operação.
+
+O cache é compartilhado entre abas, com orçamento de 256 MiB; uma camada individual maior pode ocupar o cache sozinha. Assim ele não cresce a cada região ou valor de intensidade. Mudanças na imagem, recorte, intensidade e desfazer/refazer invalidam ou reutilizam a camada correta. O modo **Sequential blur (legacy)** mantém sua ordem original de composição e reutiliza o prefixo anterior à última camada; sequências longas ainda podem precisar de cálculos adicionais ao alterar objetos anteriores.
+
+Veja [a investigação e os benchmarks reproduzíveis](docs/BLUR_PERFORMANCE.md). Os valores medem o renderizador em memória num ambiente Linux, não o FPS completo do aplicativo nem gravação de arquivos. Builds e testes funcionais também são executados no Windows e nas duas arquiteturas macOS.

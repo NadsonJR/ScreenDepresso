@@ -3,10 +3,10 @@ from .i18n import tr, native_help
 import copy
 import math
 from PySide6.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QSize, QSignalBlocker, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont, QFontMetrics, QLinearGradient
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont, QFontMetrics, QLinearGradient, QRegion
 from PySide6.QtWidgets import QWidget, QPlainTextEdit, QApplication
 from .annotations import ARROW_STYLES, BUBBLE_STYLES, bubble_path, draw_arrow, text_document, text_font
-from .blur import shared_blur, sequential_blur
+from .blur import shared_blur, sequential_blur, BlurPreview
 from .markers import MARKER_STYLES, marker_path, marker_body_hit
 from .workspace import IMAGE_SUFFIXES, read_image
 
@@ -38,6 +38,7 @@ class Canvas(QWidget):
     zoom_changed = Signal(int)
     arrow_style_changed = Signal()
     blur_settings_changed = Signal()
+    blur_rendering = Signal(bool)
     rectangle_format_changed = Signal()
     marker_style_changed = Signal()
     drop_failed = Signal(str)
@@ -69,6 +70,11 @@ class Canvas(QWidget):
         self.before = None
         self.undo_stack = []
         self.redo_stack = []
+        self.blur_preview = BlurPreview(self)
+        self.blur_preview.busy_changed.connect(self.blur_rendering, Qt.ConnectionType.QueuedConnection)
+        self.blur_preview.failed.connect(self.drop_failed, Qt.ConnectionType.QueuedConnection)
+        self._legacy_prefix_key = None
+        self._legacy_prefix = QImage()
 
     @property
     def tool(self):
@@ -94,6 +100,9 @@ class Canvas(QWidget):
 
     def load(self, image):
         self.finish_text()
+        self.blur_preview.reset()
+        self._legacy_prefix_key = None
+        self._legacy_prefix = QImage()
         self.base = image.convertToFormat(QImage.Format.Format_ARGB32)
         self.base.setDevicePixelRatio(1.0)
         self.objects = []
@@ -103,6 +112,11 @@ class Canvas(QWidget):
         self.redo_stack.clear()
         self.sync_size()
         self.update()
+
+    def hideEvent(self, event):
+        self._legacy_prefix_key = None
+        self._legacy_prefix = QImage()
+        super().hideEvent(event)
 
     @staticmethod
     def clone_object(obj):
@@ -422,7 +436,14 @@ class Canvas(QWidget):
             sequential_blur(image, rect, obj['radius'])
             return
         p = QPainter(image)
+        self.paint_object(p, obj)
+        p.end()
+
+    def paint_object(self, p, obj):
+        rect = self.object_rect(obj)
+        p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(Qt.BrushStyle.NoBrush)
         p.setPen(QPen(QColor('#ef233c'), 4))
         if obj['kind'] == 'numero':
             self.draw_marker(p, obj)
@@ -447,31 +468,104 @@ class Canvas(QWidget):
         elif obj['kind'] == 'texto':
             p.translate(rect.topLeft())
             text_document(obj, rect.width()).drawContents(p)
-        p.end()
+        p.restore()
+
+    def render_objects(self, preview=False):
+        objects = [obj for index, obj in enumerate(self.objects)
+                   if not preview or self.text_editor is None or index != self.text_index]
+        if preview and self.pending and self.pending['kind'] not in ('recorte', 'texto'):
+            objects.append(self.pending)
+        return objects
+
+    @staticmethod
+    def object_key(value):
+        if isinstance(value, QImage):
+            return ('image', value.cacheKey())
+        if isinstance(value, dict):
+            return tuple((key, Canvas.object_key(item)) for key, item in sorted(value.items()))
+        if isinstance(value, (list, tuple)):
+            return tuple(Canvas.object_key(item) for item in value)
+        return value
+
+    def legacy_layers(self, objects):
+        last = next((i for i in reversed(range(len(objects))) if objects[i]['kind'] == 'desfoque'), -1)
+        if last < 0:
+            self._legacy_prefix_key = None
+            self._legacy_prefix = QImage()
+            return self.base, None, objects
+        key = self.base.cacheKey(), self.object_key(objects[:last])
+        if key != self._legacy_prefix_key:
+            prefix = QImage(self.base)
+            for obj in objects[:last]:
+                self.draw_object(prefix, obj)
+            self._legacy_prefix = prefix
+            self._legacy_prefix_key = key
+        return self._legacy_prefix, objects[last], objects[last+1:]
 
     def render_image(self, preview=False):
-        image = self.base.copy()
+        image = QImage(self.base)
         if image.isNull():
             return image
+        objects = self.render_objects(preview)
         if self.blur_mode == 'shared':
-            regions = [(self.object_rect(obj), obj['radius']) for obj in self.objects if obj['kind'] == 'desfoque']
-            if preview and self.pending and self.pending['kind'] == 'desfoque':
-                regions.append((self.object_rect(self.pending), self.pending['radius']))
+            self._legacy_prefix_key = None
+            self._legacy_prefix = QImage()
+            regions = [(self.object_rect(obj), obj['radius']) for obj in objects if obj['kind'] == 'desfoque']
             image = shared_blur(image, regions)
-        for index, obj in enumerate(self.objects):
-            if self.blur_mode == 'shared' and obj['kind'] == 'desfoque':
-                continue
-            if not preview or self.text_editor is None or index != self.text_index:
-                self.draw_object(image, obj)
-        if preview and self.pending and (self.pending['kind'] not in ('recorte', 'texto')) and not (self.blur_mode == 'shared' and self.pending['kind'] == 'desfoque'):
-            self.draw_object(image, self.pending)
+            objects = [obj for obj in objects if obj['kind'] != 'desfoque']
+        else:
+            prefix, effect, objects = self.legacy_layers(objects)
+            image = QImage(prefix)
+            if effect is not None:
+                sequential_blur(image, self.object_rect(effect), effect['radius'])
+        for obj in objects:
+            self.draw_object(image, obj)
         return image
+
+    def paint_document(self, painter, preview=True):
+        """Paint only visible pixels; never flatten a full-size image per frame."""
+        if self.base.isNull():
+            return
+        objects = self.render_objects(preview)
+        if self.blur_mode == 'shared':
+            self._legacy_prefix_key = None
+            self._legacy_prefix = QImage()
+            regions = [(self.object_rect(obj), obj['radius']) for obj in objects if obj['kind'] == 'desfoque']
+            if regions:
+                blurred = self.blur_preview.preview(self.base, max(radius for _, radius in regions))
+                clear = QRegion()
+                for rect, _ in regions:
+                    clear |= QRegion(rect.intersected(self.base.rect()))
+                # Disjoint clips avoid applying transparency twice in clear areas.
+                painter.save()
+                painter.setClipRegion(QRegion(self.base.rect())-clear, Qt.ClipOperation.IntersectClip)
+                painter.drawImage(self.base.rect(), blurred)
+                painter.restore()
+                painter.save()
+                painter.setClipRegion(clear, Qt.ClipOperation.IntersectClip)
+                painter.drawImage(0, 0, self.base)
+                painter.restore()
+            else:
+                painter.drawImage(0, 0, self.base)
+                self.blur_preview.set_busy(False)
+            objects = [obj for obj in objects if obj['kind'] != 'desfoque']
+        else:
+            prefix, effect, objects = self.legacy_layers(objects)
+            painter.drawImage(0, 0, prefix)
+            if effect is not None:
+                painter.drawImage(prefix.rect(), self.blur_preview.preview(prefix, effect['radius']))
+                rect = self.object_rect(effect)
+                painter.drawImage(rect, prefix, rect)
+            else:
+                self.blur_preview.set_busy(False)
+        for obj in objects:
+            self.paint_object(painter, obj)
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.scale(self.zoom, self.zoom)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        p.drawImage(0, 0, self.render_image(True))
+        self.paint_document(p)
         p.setPen(QPen(QColor('#2563eb'), 1, Qt.PenStyle.DashLine))
         if self.pending and self.pending['kind'] in ('recorte', 'texto'):
             p.drawRect(self.object_rect(self.pending))

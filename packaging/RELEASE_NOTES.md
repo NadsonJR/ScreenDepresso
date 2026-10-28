@@ -1,3 +1,14 @@
+## Novidades da versão 0.7.2
+
+- Corrigido o gargalo que recalculava o desfoque da imagem inteira a cada repintura, movimento ou redimensionamento de uma área nítida.
+- Camada de desfoque reutilizada por imagem/intensidade, com cache de memória compartilhado entre abas e orçamento de 256 MiB (uma camada maior pode ocupar o cache sozinha).
+- Pintura direta da área visível, evitando copiar/renderizar o bitmap completo a cada quadro.
+- Preparação da camada completa em segundo plano para imagens grandes, com prévia temporária leve e aviso no rodapé. A prévia exata substitui a temporária ao concluir.
+- Copiar e salvar continuam usando a resolução original e o filtro Gaussiano anterior, sem exportar a prévia reduzida; se necessário, aguardam o cálculo completo. Renderizações duplicadas dessas ações foram removidas.
+- Ordem de composição do modo legado, áreas nítidas sobrepostas, transparência, recorte e desfazer/refazer preservados e cobertos por testes.
+- Benchmark reproduzível para 4K, 8K e 96 megapixels: [investigação de desempenho](https://github.com/NadsonJR/ScreenDepresso/blob/v0.7.2/docs/BLUR_PERFORMANCE.md). Tempos de desenho em cache não representam FPS completo do app; o primeiro cálculo continua proporcional ao tamanho da imagem.
+- A 0.7.1 substitui os antigos instaladores da 0.7.0. A página antiga aponta para o novo download; a tag de código foi mantida no histórico.
+
 ## Novidades da versão 0.7.1
 
 - Nova identidade visual seguindo o guia: paleta escura, ícones consistentes, fonte de interface do sistema e controles de janela nativos.
@@ -7,9 +18,7 @@
 - Layout compacto com ícones/overflow, rolagem de propriedades, tooltips traduzidos, atalhos nativos do macOS e suporte HiDPI/Retina.
 - Sem alterações nos formatos de imagem, diretórios, configurações ou mecanismos de captura.
 
-**Downloads independentes:** [0.7.1 — novo visual](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.1) e [0.7.0 — design anterior preservado para rollback](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.0). Os instaladores da 0.7.0 permanecem intactos.
-
-Para voltar, salve as edições, encerre o app e reinstale a 0.7.0 do seu sistema. No Ubuntu: `sudo apt install --allow-downgrades ./screendepresso_0.7.0_amd64.deb`. No Windows: execute o instalador 0.7.0. No macOS: substitua o app pelo do DMG 0.7.0. Preserve os diretórios de capturas/configurações; o atualizador não faz downgrade automaticamente.
+**Versão substituída:** os instaladores da 0.7.0 foram retirados a pedido do mantenedor. Use a [0.7.1](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.1) ou uma versão mais recente. A tag de código antiga permanece no histórico.
 
 ## Novidades da versão 0.7.0
 

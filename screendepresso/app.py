@@ -357,6 +357,7 @@ class MainWindow(QMainWindow):
                 (canvas.rectangle_format_changed, self.display_rectangle_format),
                 (canvas.marker_style_changed, self.display_marker_style),
                 (canvas.drop_failed, lambda message: self.statusBar().showMessage(message, 4000)),
+                (canvas.blur_rendering, self.blur_preview_status),
             ]:
                 signal.connect(lambda *args, c=canvas, f=callback: self.update_editor_controls(f, *args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
             canvas.setProperty('windowSignalsConnected', True)
@@ -377,6 +378,16 @@ class MainWindow(QMainWindow):
         self.update_dimensions()
         self.tabs.retranslate()
         self.context_bar.refresh()
+        self.blur_preview_status(canvas.blur_preview.busy)
+
+    def blur_preview_status(self, busy):
+        engine = self.canvas.blur_preview
+        busy = busy and engine.busy and not (engine.future is not None and engine.future.done())
+        message = tr('Preparing full-resolution blur…')
+        if busy:
+            self.statusBar().showMessage(message)
+        elif self.statusBar().currentMessage() == message:
+            self.statusBar().clearMessage()
 
     def update_editor_controls(self, callback, *args):
         callback(*args)
@@ -956,25 +967,27 @@ class MainWindow(QMainWindow):
 
     def copy(self):
         self.canvas.finish_text()
-        if not self.canvas.image.isNull():
-            QApplication.clipboard().setImage(self.canvas.image)
+        if not self.canvas.base.isNull():
+            image = self.canvas.image
+            QApplication.clipboard().setImage(image)
             self.statusBar().showMessage(tr('Image copied. Keep the application open to provide clipboard data.'), 4000)
 
     def save(self):
         self.canvas.finish_text()
-        if self.canvas.image.isNull():
+        if self.canvas.base.isNull():
             return False
         path, _ = QFileDialog.getSaveFileName(self, tr('Save image'), str(self.history.directory / tr('capture.png')), 'PNG (*.png);;JPEG (*.jpg *.jpeg)', '', QFileDialog.Option.DontUseNativeDialog)
         if path:
             if not Path(path).suffix:
                 path += '.png'
-            if not self.canvas.image.save(path):
+            image = self.canvas.image
+            if not image.save(path):
                 QMessageBox.warning(self, tr('Save'), tr('Could not save to this path or format.'))
                 return False
             else:
                 self.tabs.mark_saved(path)
                 try:
-                    self.history.save(self.canvas.image)
+                    self.history.save(image)
                     self.refresh()
                 except OSError as exc:
                     QMessageBox.warning(self, tr('Workspace'), str(exc))
@@ -1084,6 +1097,30 @@ def run_application(app, instance):
             store.trash(duplicate)
             if duplicate.exists() or not original.exists():
                 raise RuntimeError('Workspace trash smoke test failed')
+        # Exercise the packaged Pillow/Qt buffer conversion and worker thread,
+        # not just the small, synchronous blur used by the annotations above.
+        from PySide6.QtGui import QPainter
+        probe = Canvas()
+        large = QImage(2304, 1296, QImage.Format.Format_ARGB32)
+        large.fill(QColor('white'))
+        probe.load(large)
+        probe.objects = [{'kind':'desfoque', 'a':[100,100], 'b':[300,300], 'radius':14}]
+        viewport = QImage(640, 480, QImage.Format.Format_ARGB32)
+        painter = QPainter(viewport)
+        probe.paint_document(painter)
+        painter.end()
+        future = probe.blur_preview.future
+        if future is None:
+            raise RuntimeError('Background blur worker was not started')
+        future.result(timeout=15)
+        import time
+        deadline = time.monotonic()+5
+        while probe.blur_preview.busy and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(.005)
+        if probe.blur_preview.busy or probe.image.size() != large.size():
+            raise RuntimeError('Full-resolution background blur smoke test failed')
+        probe.deleteLater()
         print('Interface, tabs, balloons, text, zoom, workspace and clipboard: OK (offscreen)', flush=True)
         QTimer.singleShot(100, window.request_quit)
     sys.exit(app.exec())
