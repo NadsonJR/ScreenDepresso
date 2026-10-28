@@ -100,6 +100,7 @@ class MainWindow(QMainWindow):
         ribbon = QToolBar(tr('Actions'), self)
         ribbon.setObjectName('ribbon')
         ribbon.setMovable(False)
+        ribbon.setFont(self.font())
         self.ribbon = ribbon
         ribbon.setIconSize(QSize(36, 36))
         ribbon.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
@@ -135,6 +136,7 @@ class MainWindow(QMainWindow):
         tools = QToolBar(tr('Tools'), self)
         tools.setObjectName('tools')
         tools.setMovable(False)
+        tools.setFont(self.font())
         self.tools = tools
         tools.setIconSize(QSize(32, 32))
         tools.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -240,6 +242,7 @@ class MainWindow(QMainWindow):
             for action in bar.actions():
                 button = bar.widgetForAction(action)
                 if isinstance(button, QToolButton):
+                    button.setFont(self.font())
                     button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
         zoom_panel = QWidget()
