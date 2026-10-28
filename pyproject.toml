@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "screendepresso"
 dynamic = ["version"]
 description = "Screenshot capture and annotation for Windows and Linux X11"
-requires-python = ">=3.10"
-dependencies = ["PySide6>=6.8,<7", "Pillow>=11,<13", "python-xlib>=0.33,<1; sys_platform == 'linux'"]
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.8,<7", "Pillow>=13,<14", "python-xlib>=0.33,<1; sys_platform == 'linux'"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]

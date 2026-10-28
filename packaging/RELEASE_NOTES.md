@@ -1,3 +1,8 @@
+## Novidades da versão 0.5.2
+
+- Pillow atualizado para 13.0.0, com correções de segurança.
+- Instalações pelo código-fonte agora exigem Python 3.11 ou posterior, conforme o requisito do Pillow. Os instaladores continuam incluindo Python.
+
 ## Novidades da versão 0.5.1
 
 - Apenas uma instância do ScreenDepresso por perfil de usuário no Windows e Linux.
