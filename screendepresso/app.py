@@ -3,9 +3,9 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize, QByteArray, QBuffer, QIODevice
-from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap, QFont
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
+from PySide6.QtCore import Qt, QRect, QTimer, QSize, QByteArray, QBuffer, QIODevice
+from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .documents import CaptureTabs
@@ -13,7 +13,8 @@ from .annotations import ARROW_STYLES, BUBBLE_STYLES
 from .markers import MARKER_STYLES
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
-from .platform_support import capture_desktop, data_directory, global_hotkeys_available
+from .platform_support import capture_desktop, crop_desktop, data_directory, global_hotkeys_available
+from .capture_ui import Selector, WindowPicker
 
 class History:
 
@@ -51,54 +52,10 @@ class History:
     def entries(self):
         return sorted(self.directory.glob('*.png'), reverse=True)
 
-class Selector(QWidget):
-    selected = Signal(QRect)
-    cancelled = Signal()
-
-    def __init__(self, pixmap, geometry):
-        super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
-        self.pixmap = pixmap
-        self.begin = self.end = None
-        self.setGeometry(geometry)
-        self.setCursor(Qt.CursorShape.CrossCursor)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.drawPixmap(0, 0, self.pixmap)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 90))
-        if self.begin is not None:
-            rect = QRect(self.begin, self.end).normalized()
-            painter.drawPixmap(rect, self.pixmap, rect)
-            painter.setPen(QPen(QColor('#fb7185'), 2))
-            painter.drawRect(rect)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.begin = self.end = event.position().toPoint()
-
-    def mouseMoveEvent(self, event):
-        if self.begin is not None:
-            self.end = event.position().toPoint()
-            self.update()
-
-    def mouseReleaseEvent(self, event):
-        if self.begin is not None and event.button() == Qt.MouseButton.LeftButton:
-            rect = QRect(self.begin, event.position().toPoint()).normalized().intersected(self.rect())
-            self.close()
-            if rect.width() > 2 and rect.height() > 2:
-                self.selected.emit(rect)
-            else:
-                self.cancelled.emit()
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.close()
-            self.cancelled.emit()
-
 def windows():
     if sys.platform == 'win32':
         from .windows_backend import windows as list_windows
-        return list_windows()
+        return list_windows(with_ids=True)
     from Xlib import X, display
     connection = display.Display()
     try:
@@ -109,13 +66,40 @@ def windows():
             try:
                 window = connection.create_resource_object('window', int(wid))
                 title = window.get_wm_name() or ''
+                pid = window.get_full_property(connection.intern_atom('_NET_WM_PID'), X.AnyPropertyType)
+                if pid is not None and len(pid.value) and int(pid.value[0]) == os.getpid():
+                    continue
+                if window.get_attributes().map_state != X.IsViewable:
+                    continue
+                utf8 = window.get_full_property(connection.intern_atom('_NET_WM_NAME'), X.AnyPropertyType)
+                if utf8 is not None:
+                    title = bytes(utf8.value).decode('utf-8', errors='replace')
+                elif isinstance(title, bytes):
+                    title = title.decode(errors='replace')
                 if title and title != 'ScreenDepresso':
                     geometry = window.get_geometry()
                     position = root.translate_coords(window, 0, 0)
-                    result.append((title, QRect(position.x, position.y, geometry.width, geometry.height)))
+                    result.append((title, QRect(position.x, position.y, geometry.width, geometry.height), int(wid)))
             except Exception:
                 continue
         return result
+    finally:
+        connection.close()
+
+def activate_window(wid):
+    if sys.platform == 'win32':
+        from .windows_backend import activate_window as activate
+        return activate(wid)
+    from Xlib import X, display, protocol
+    connection = display.Display()
+    try:
+        root = connection.screen().root
+        window = connection.create_resource_object('window', wid)
+        event = protocol.event.ClientMessage(window=window, client_type=connection.intern_atom('_NET_ACTIVE_WINDOW'),
+                                             data=(32, [2, X.CurrentTime, 0, 0, 0]))
+        root.send_event(event, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+        window.configure(stack_mode=X.Above)
+        connection.sync()
     finally:
         connection.close()
 
@@ -127,6 +111,7 @@ class MainWindow(QMainWindow):
         set_language(self.settings.language)
         self.setWindowTitle('ScreenDepresso')
         self._quitting = False
+        self._capture_pending = False
         self.setPalette(dark_palette())
         self.setStyleSheet(STYLE)
         self.resize(1280, 840)
@@ -160,7 +145,12 @@ class MainWindow(QMainWindow):
         add_action(ribbon, tr('Redo'), '↷', lambda: self.canvas.redo(), '#b87b2d', 'Ctrl+Y')
         add_action(ribbon, tr('Crop'), 'crop', lambda: self.choose_tool('recorte'))
         ribbon.addSeparator()
-        add_action(ribbon, tr('Full screen'), '▣', lambda: self.capture('tela'))
+        full_screen_action = add_action(ribbon, tr('Full screen'), '▣', lambda: self.capture('tela'))
+        self.monitor_menu = QMenu(ribbon)
+        self.monitor_menu.aboutToShow.connect(self.refresh_monitor_menu)
+        full_screen_button = ribbon.widgetForAction(full_screen_action)
+        full_screen_button.setMenu(self.monitor_menu)
+        full_screen_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         add_action(ribbon, tr('Window'), '▢', lambda: self.capture('janela'))
         add_action(ribbon, tr('Region'), '⌗', lambda: self.capture('região'))
         ribbon.addSeparator()
@@ -777,46 +767,86 @@ class MainWindow(QMainWindow):
         self.tabs.open_image(image, path)
         self.update_dimensions()
 
-    def capture(self, mode):
-        target = None
-        if mode == 'janela':
-            try:
-                choices = windows()
-                if not choices:
-                    raise RuntimeError(tr('No windows available.'))
-                labels = [f'{i + 1}. {title}' for i, (title, _) in enumerate(choices)]
-                chosen, ok = QInputDialog.getItem(self, tr('Capture window'), tr('Visible window (unobstructed):'), labels, 0, False)
-                if not ok:
-                    return
-                target = choices[labels.index(chosen)][1]
-            except Exception as exc:
-                QMessageBox.warning(self, tr('Window capture'), str(exc))
-                return
-        self.hide()
-        QTimer.singleShot(350, lambda: self.take_capture(mode, target))
+    def refresh_monitor_menu(self):
+        self.monitor_menu.clear()
+        action = self.monitor_menu.addAction(tr('All monitors'), lambda: self.capture('tela'))
+        action.setToolTip(tr('Capture the complete virtual desktop.'))
+        self.monitor_menu.addSeparator()
+        for index, screen in enumerate(QApplication.screens()):
+            rect, ratio = screen.geometry(), screen.devicePixelRatio()
+            label = tr('Monitor {number}').format(number=index+1)+' • '+screen.name()+f' • {round(rect.width()*ratio)} × {round(rect.height()*ratio)}'
+            if screen is QApplication.primaryScreen():
+                label += ' • '+tr('Primary')
+            action = self.monitor_menu.addAction(label, lambda checked=False, name=screen.name(): self.capture('tela', name))
+            action.setToolTip(label)
+        self.monitor_menu.setToolTipsVisible(True)
 
-    def take_capture(self, mode, target):
+    def cancel_capture(self):
+        if hasattr(self, 'selector'):
+            self.selector.close()
+        self._capture_pending = False
+        self.open_editor()
+
+    def capture(self, mode, screen_name=None):
+        if self._quitting or self._capture_pending:
+            return
+        self.canvas.finish_text()
+        self._capture_pending = True
+        self.hide()
+        QTimer.singleShot(350, lambda: self.prepare_capture(mode, screen_name))
+
+    def prepare_capture(self, mode, screen_name=None):
+        if self._quitting:
+            return
+        if mode != 'janela':
+            self.take_capture(mode, None, screen_name)
+            return
         try:
-            pixmap, geometry = capture_desktop()
+            desktop, geometry = capture_desktop()
+            choices = [choice for choice in windows() if choice[1].intersects(geometry)]
+            if not choices:
+                raise RuntimeError(tr('No windows available.'))
+            picker = WindowPicker(choices, desktop, geometry, self)
+            try:
+                target = picker.selected_window() if picker.exec() == picker.DialogCode.Accepted else None
+            finally:
+                picker.deleteLater()
+            if target is None:
+                self.cancel_capture()
+                return
+            self.hide()
+            activate_window(target[2])
+            QTimer.singleShot(450, lambda: self.take_capture(mode, target))
+        except Exception as exc:
+            self.cancel_capture()
+            QMessageBox.warning(self, tr('Window capture'), str(exc))
+
+    def take_capture(self, mode, target, screen_name=None):
+        if self._quitting:
+            return
+        try:
+            if target is not None:
+                target = next((choice for choice in windows() if choice[2] == target[2]), None)
+                if target is None:
+                    raise RuntimeError(tr('The selected window is no longer available.'))
+            pixmap, geometry = capture_desktop(screen_name)
             if pixmap.isNull():
                 raise RuntimeError(tr('Capture unavailable. Run in an X11 session.'))
             if mode == 'região':
-                self.selector = Selector(pixmap, geometry)
-                self.selector.selected.connect(lambda rect: self.finish_capture(pixmap.copy(QRect(round(rect.x() * pixmap.devicePixelRatio()), round(rect.y() * pixmap.devicePixelRatio()), round(rect.width() * pixmap.devicePixelRatio()), round(rect.height() * pixmap.devicePixelRatio()))).toImage()))
-                self.selector.cancelled.connect(self.open_editor)
+                self.selector = Selector(pixmap, geometry, self)
+                self.selector.selected.connect(lambda rect: self.finish_capture(crop_desktop(pixmap, geometry, rect).toImage()))
+                self.selector.cancelled.connect(self.cancel_capture)
                 self.selector.show()
-                self.selector.activateWindow()
                 return
             if target is not None:
-                ratio = pixmap.devicePixelRatio()
-                target = QRect(round((target.x()-geometry.x()) * ratio), round((target.y()-geometry.y()) * ratio), round(target.width() * ratio), round(target.height() * ratio))
-                pixmap = pixmap.copy(target.intersected(pixmap.rect()))
+                pixmap = crop_desktop(pixmap, geometry, target[1])
             self.finish_capture(pixmap.toImage())
         except Exception as exc:
-            self.open_editor()
+            self.cancel_capture()
             QMessageBox.warning(self, tr('Capture error'), str(exc))
 
     def finish_capture(self, image):
+        self._capture_pending = False
         self.open_editor()
         try:
             path = self.history.save(image)

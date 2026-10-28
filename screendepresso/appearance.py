@@ -10,7 +10,7 @@ QMenuBar { padding: 3px; }
 QMenuBar::item:selected, QMenu::item:selected { background: #465164; }
 QToolBar { border: 0; spacing: 8px; padding: 10px; }
 QToolBar#tools { background: #30343d; padding: 8px; spacing: 8px; }
-QToolButton { background: transparent; border: 1px solid transparent; border-radius: 0; padding: 5px; }
+QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 5px; }
 QToolButton:hover { background: #414854; border-color: #64748b; }
 QToolButton:checked { background: #3b5273; border-color: #7bb5ff; }
 QToolButton:disabled { color: #737b8b; }
@@ -20,7 +20,7 @@ QDockWidget::title { background: #30343d; padding: 8px; }
 QListWidget, QLineEdit, QKeySequenceEdit, QSpinBox, QComboBox { background: #1c2028; color: #e5e7eb; border: 1px solid #475163; border-radius: 4px; padding: 6px; }
 QListWidget::item { padding: 10px; }
 QListWidget::item:selected { background: #36577d; }
-QPushButton { background: #3b4351; border: 1px solid #566277; border-radius: 0; padding: 8px 12px; }
+QPushButton { background: #3b4351; border: 1px solid #566277; border-radius: 5px; padding: 8px 12px; }
 QPushButton:hover { background: #4a5870; }
 QProgressBar { background: #171a20; color: #f8fafc; border: 1px solid #475163; text-align: center; min-height: 18px; }
 QProgressBar::chunk { background: #3878a8; }
@@ -48,7 +48,7 @@ def icon(symbol, color='#3878a8'):
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(QColor(color))
-    p.drawRect(QRectF(2, 2, 44, 44))
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 7, 7)
     p.setPen(QPen(QColor('#f8fafc'), 2.5))
     if symbol == 'save':
         path = QPainterPath()

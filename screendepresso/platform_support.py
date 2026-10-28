@@ -1,8 +1,9 @@
 import os
 import sys
 from pathlib import Path
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QGuiApplication, QImage, QPainter, QPixmap
+from .i18n import tr
 
 
 def global_hotkeys_available():
@@ -25,23 +26,46 @@ def data_directory():
     return Path.home()/'.local/share/screendepresso'
 
 
-def capture_desktop():
+def desktop_pixel_rect(geometry, rect, scale):
+    """Map logical global edges once, avoiding seams with fractional scaling."""
+    x = round((rect.x()-geometry.x())*scale)
+    y = round((rect.y()-geometry.y())*scale)
+    right = round((rect.x()+rect.width()-geometry.x())*scale)
+    bottom = round((rect.y()+rect.height()-geometry.y())*scale)
+    return QRect(x, y, right-x, bottom-y)
+
+
+def crop_desktop(pixmap, geometry, rect):
+    rect = rect.intersected(geometry)
+    if rect.isEmpty():
+        raise RuntimeError(tr('The selected area is outside the available monitors.'))
+    return pixmap.copy(desktop_pixel_rect(geometry, rect, pixmap.devicePixelRatio()))
+
+
+def capture_desktop(screen_name=None):
     screens = QGuiApplication.screens()
-    if sys.platform != 'win32':
-        pixmap = QGuiApplication.primaryScreen().grabWindow(0)
-        return pixmap, QRect(QPoint(0, 0), pixmap.deviceIndependentSize().toSize())
+    if screen_name is not None:
+        screens = [screen for screen in screens if screen.name() == screen_name]
+    if not screens:
+        raise RuntimeError(tr('The selected monitor is no longer available.'))
     geometry = QRect()
     for screen in screens:
         geometry = geometry.united(screen.geometry())
-    image = QImage(geometry.size(), QImage.Format.Format_ARGB32)
-    image.fill(0)
+    scale = max(screen.devicePixelRatio() for screen in screens)
+    image = QImage(round(geometry.width()*scale), round(geometry.height()*scale), QImage.Format.Format_ARGB32)
+    image.fill(Qt.GlobalColor.transparent)
+    if image.isNull():
+        raise RuntimeError(tr('The desktop image is too large to capture.'))
     painter = QPainter(image)
     try:
-        for screen in screens:
-            pixmap = screen.grabWindow(0)
+        for screen in sorted(screens, key=lambda screen: screen.devicePixelRatio()):
+            rect = screen.geometry()
+            pixmap = screen.grabWindow(0, 0, 0, rect.width(), rect.height())
             if pixmap.isNull():
-                raise RuntimeError('Windows screen capture is unavailable.')
-            painter.drawImage(screen.geometry().translated(-geometry.topLeft()), pixmap.toImage())
+                raise RuntimeError(tr('Screen capture is unavailable for monitor: ')+screen.name())
+            painter.drawImage(desktop_pixel_rect(geometry, rect, scale), pixmap.toImage())
     finally:
         painter.end()
-    return QPixmap.fromImage(image), geometry
+    pixmap = QPixmap.fromImage(image)
+    pixmap.setDevicePixelRatio(scale)
+    return pixmap, geometry

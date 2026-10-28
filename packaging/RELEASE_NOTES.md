@@ -1,3 +1,11 @@
+## Novidades da versão 0.6.4
+
+- Captura de tela inteira combina todos os monitores, incluindo telas à esquerda/acima da principal e monitores com escalas diferentes.
+- Menu no botão **Full screen** para capturar todos os monitores ou apenas um monitor específico; o atalho global continua capturando todos.
+- Seleção de janela por grade de miniaturas, com título, clique duplo e confirmação. A janela escolhida é trazida para a frente antes da captura.
+- Seleção de região com uma sobreposição por monitor, cobrindo a geometria completa da tela, inclusive barras do sistema. Permite arrastar entre monitores e cancelar com Esc.
+- Cantos suavemente arredondados nos botões e nos fundos dos ícones.
+
 ## Novidades da versão 0.6.3
 
 - Espessura da borda de retângulos ajustável de 1 a 40 px no menu do botão lateral.

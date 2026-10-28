@@ -159,6 +159,20 @@ CATALOG.update({
  'Outlined circle': 'Círculo com contorno', 'Hexagon marker': 'Marcador hexagonal',
  'Numbers • Click for the next number; drag from the marker to its target': 'Números • Clique para o próximo número; arraste do marcador até o alvo',
 })
+CATALOG.update({
+ 'All monitors': 'Todos os monitores',
+ 'Capture the complete virtual desktop.': 'Capturar toda a área de exibição dos monitores.',
+ 'Monitor {number}': 'Monitor {number}', 'Primary': 'Principal',
+ 'Choose a window preview to capture.': 'Escolha uma prévia de janela para capturar.',
+ 'Double-click a preview to capture that window.': 'Clique duas vezes em uma prévia para capturar a janela.',
+ 'Capture selected window': 'Capturar janela selecionada',
+ 'Could not bring the selected window to the foreground.': 'Não foi possível trazer a janela selecionada para a frente.',
+ 'The selected window is no longer available.': 'A janela selecionada não está mais disponível.',
+ 'The selected area is outside the available monitors.': 'A área selecionada está fora dos monitores disponíveis.',
+ 'The selected monitor is no longer available.': 'O monitor selecionado não está mais disponível.',
+ 'The desktop image is too large to capture.': 'A imagem da área de trabalho é grande demais para capturar.',
+ 'Screen capture is unavailable for monitor: ': 'Captura de tela indisponível no monitor: ',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None

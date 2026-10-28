@@ -17,8 +17,8 @@ Com `uv`, use `uv sync --frozen --extra dev` e `uv run screendepresso`.
 
 ## Uso
 
-- Tela inteira: botão ou **Ctrl+Shift+1**.
-- Janela: botão ou **Ctrl+Shift+2**, depois escolha a janela na lista.
+- Tela inteira: botão ou **Ctrl+Shift+1** captura todos os monitores. O menu do botão permite escolher apenas um monitor.
+- Janela: botão ou **Ctrl+Shift+2**, depois escolha uma janela na grade de miniaturas.
 - Região: botão ou **Ctrl+Shift+3**, arraste a seleção; **Esc** cancela.
 - Editor: escolha a ferramenta e arraste na imagem. Texto pede o conteúdo ao clicar. Use Desfazer para reverter operações.
 - Copiar envia a versão editada para a área de transferência. Mantenha o aplicativo aberto para servir os dados da área de transferência no X11.
@@ -27,7 +27,7 @@ Com `uv`, use `uv sync --frozen --extra dev` e `uv run screendepresso`.
 
 ## Limitações atuais
 
-Captura de janela copia sua área visível da tela, sem a decoração. Janelas sobrepostas aparecem na captura; mantenha a janela escolhida visível. A versão inicial não captura conteúdo oculto ou minimizado. Atalhos em conflito são informados na barra de status. O ícone de bandeja depende do suporte do GNOME (extensão AppIndicator); a janela e os atalhos não dependem dele. Ao fechar a janela, escolha minimizar em segundo plano, encerrar ou cancelar.
+Captura de janela copia sua área visível da tela. Após a escolha por miniatura, o aplicativo tenta trazê-la para a frente. Janelas sempre acima e conteúdo protegido ainda podem aparecer ou impedir a captura. No X11, a captura usa a área do cliente, sem a decoração do gerenciador de janelas. A versão inicial não captura conteúdo oculto ou minimizado. Atalhos em conflito são informados na barra de status. O ícone de bandeja depende do suporte do GNOME (extensão AppIndicator); a janela e os atalhos não dependem dele. Ao fechar a janela, escolha minimizar em segundo plano, encerrar ou cancelar.
 
 O histórico é local e sem expiração automática; pode conter dados sensíveis. Desfoque é um efeito visual, não uma garantia de remoção de informação sensível. Wayland não é suportado nesta versão. Escala mista entre monitores ainda precisa de validação em hardware real.
 
@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.6.3)
+## Instalador e atualizações (v0.6.4)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.6.3_amd64.deb
+sudo apt install ./screendepresso_0.6.4_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.3` e `git push origin v0.6.3`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.4` e `git push origin v0.6.4`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.6.3_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.6.4_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -212,3 +212,13 @@ Abra o menu do botão **Rectangle** para escolher a cor, a **Border thickness** 
 O menu de **Numbered markers** oferece seis modelos: **Classic circle**, **Flat circle**, **Square marker**, **Diamond marker**, **Outlined circle** e **Hexagon marker**. É possível misturar modelos na mesma imagem, mantendo uma única sequência de números. Escolher um modelo altera o marcador selecionado e o padrão dos próximos; a cor continua sendo comum a todos os marcadores da imagem. Centro, linha e ponta mantêm os controles de movimento existentes.
 
 Todas as opções aparecem na prévia durante o desenho, funcionam com zoom e podem ser desfeitas/refeitas. Os menus acompanham o idioma escolhido nas configurações.
+
+## Vários monitores, miniaturas e seleção de região (0.6.4)
+
+**Full screen** e o atalho global capturam a área completa dos monitores, respeitando suas posições, inclusive telas à esquerda ou acima da principal. Abra a seta do botão para escolher **All monitors** ou um monitor específico, identificado pelo nome e pela resolução. O menu é atualizado quando aberto; monitores desconectados são informados, sem retornar uma captura parcial silenciosamente.
+
+Com escalas diferentes, a composição usa a maior densidade de pixels entre os monitores selecionados. Os demais são ajustados a essa escala comum para preservar o alinhamento com a seleção de região; espaços sem monitor ficam transparentes. Capturar um único monitor mantém sua resolução nativa. A validação automatizada cobre posições negativas, telas empilhadas, espaços entre telas e escala fracionária; ainda é recomendável conferir configurações físicas de escala mista no hardware de uso.
+
+**Window** abre uma grade de miniaturas. Clique duas vezes ou escolha uma prévia e confirme em **Capture selected window**. As miniaturas usam a captura nativa da janela quando disponível, com fallback para a área visível do desktop. Janelas minimizadas não entram na seleção. A janela escolhida é ativada e sua posição é consultada novamente antes de capturar. Cancelar restaura o editor e preserva todas as abas.
+
+**Region** abre uma sobreposição independente em cada monitor, usando a geometria completa em vez da área de trabalho reduzida pelas barras do sistema. No X11, a sobreposição ignora o reposicionamento do gerenciador de janelas, evitando que o GNOME desloque a imagem para cima do dock. A seleção pode atravessar monitores; **Esc** cancela e libera o mouse e o teclado.

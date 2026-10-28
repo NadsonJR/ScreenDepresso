@@ -72,3 +72,45 @@ def test_rebind_and_conflict_rollback(x11):
         assert hotkeys.shortcuts == changed
     finally:
         hotkeys.stop()
+
+
+def test_native_x11_capture_and_full_screen_region_overlay(x11):
+    import sys
+    env = os.environ.copy()
+    env['QT_QPA_PLATFORM'] = 'xcb'
+    script = '''
+from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import Qt, QPoint
+from PySide6.QtTest import QTest
+from screendepresso.platform_support import capture_desktop, crop_desktop
+from screendepresso.capture_ui import Selector
+app = QApplication([])
+window = QWidget(None, Qt.WindowType.FramelessWindowHint)
+window.setStyleSheet('background: #e63946;')
+window.setGeometry(10,10,80,50)
+window.show()
+assert QTest.qWaitForWindowExposed(window,5000)
+QTest.qWait(200)
+pixmap, geometry = capture_desktop()
+assert geometry == app.primaryScreen().geometry()
+point = window.geometry().center()-geometry.topLeft()
+color = pixmap.toImage().pixelColor(round(point.x()*pixmap.devicePixelRatio()), round(point.y()*pixmap.devicePixelRatio()))
+assert color.red() > 200 and color.green() < 100, color.name()
+selector = Selector(pixmap,geometry)
+selected = []
+selector.selected.connect(selected.append)
+selector.show()
+QTest.qWait(100)
+assert selector.overlays[0].geometry() == geometry
+assert selector.overlays[0].windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+overlay = selector.overlays[0]
+QTest.mousePress(overlay,Qt.MouseButton.LeftButton,pos=QPoint(1,1))
+QTest.mouseMove(overlay,overlay.rect().bottomRight())
+QTest.mouseRelease(overlay,Qt.MouseButton.LeftButton,pos=overlay.rect().bottomRight())
+assert selected == [geometry.adjusted(1,1,0,0)], selected
+assert not selector.overlays
+assert crop_desktop(pixmap,geometry,selected[0]).height() == round((geometry.height()-1)*pixmap.devicePixelRatio())
+window.close()
+'''
+    result = subprocess.run([sys.executable,'-c',script],env=env,capture_output=True,text=True,timeout=20)
+    assert result.returncode == 0, result.stdout+result.stderr

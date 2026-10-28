@@ -126,6 +126,16 @@ point = window.geometry().center() - geometry.topLeft()
 color = pixmap.toImage().pixelColor(point)
 assert color.red() > 200 and color.green() < 100, color.name()
 assert any(title == window.windowTitle() for title, rect in windows())
+from screendepresso.capture_ui import Selector
+selector = Selector(pixmap, geometry)
+selector.show()
+QTest.qWait(100)
+assert selector.overlays
+for overlay in selector.overlays:
+ assert overlay.geometry() == overlay.capture_screen.geometry().intersected(geometry)
+ assert overlay.image.height() == round(overlay.bounds.height()*pixmap.devicePixelRatio())
+selector.cancel()
+assert not selector.overlays
 window.close()
 '''
     result = subprocess.run([sys.executable, '-c', script], env=env, capture_output=True, text=True, timeout=30)

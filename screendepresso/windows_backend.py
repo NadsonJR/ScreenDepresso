@@ -45,6 +45,10 @@ class WinAPI:
             'GetWindowTextLengthW': ([wintypes.HWND], ctypes.c_int),
             'GetWindowTextW': ([wintypes.HWND, wintypes.LPWSTR, ctypes.c_int], ctypes.c_int),
             'GetWindowRect': ([wintypes.HWND, ctypes.POINTER(wintypes.RECT)], wintypes.BOOL),
+            'GetWindowThreadProcessId': ([wintypes.HWND, ctypes.POINTER(wintypes.DWORD)], wintypes.DWORD),
+            'SetForegroundWindow': ([wintypes.HWND], wintypes.BOOL),
+            'GetForegroundWindow': ([], wintypes.HWND),
+            'ShowWindow': ([wintypes.HWND, ctypes.c_int], wintypes.BOOL),
             'MonitorFromWindow': ([wintypes.HWND, wintypes.DWORD], wintypes.HMONITOR),
             'GetMonitorInfoW': ([wintypes.HMONITOR, ctypes.c_void_p], wintypes.BOOL),
         }
@@ -143,7 +147,7 @@ class WindowsHotkeys(QObject):
         self.thread = None
 
 
-def windows():
+def windows(with_ids=False):
     from PySide6.QtGui import QGuiApplication
     api = WinAPI()
     result = []
@@ -163,6 +167,12 @@ def windows():
         api.user.GetWindowTextW(hwnd, title, length+1)
         if title.value == 'ScreenDepresso':
             return True
+        if with_ids:
+            import os
+            pid = wintypes.DWORD()
+            api.user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value == os.getpid():
+                return True
         native = wintypes.RECT()
         if not api.user.GetWindowRect(hwnd, ctypes.byref(native)):
             return True
@@ -180,10 +190,18 @@ def windows():
                                  round((native.right-native.left)/scale), round((native.bottom-native.top)/scale))
                     break
         if rect.width() > 0 and rect.height() > 0:
-            result.append((title.value, rect))
+            result.append((title.value, rect, int(hwnd)) if with_ids else (title.value, rect))
         return True
 
     callback = api.callback_type(visit)
     if not api.user.EnumWindows(callback, 0):
         raise ctypes.WinError(ctypes.get_last_error())
     return result
+
+
+def activate_window(hwnd):
+    api = WinAPI()
+    if api.user.IsIconic(hwnd):
+        api.user.ShowWindow(hwnd, 9)
+    if not api.user.SetForegroundWindow(hwnd) and api.user.GetForegroundWindow() != hwnd:
+        raise RuntimeError(tr('Could not bring the selected window to the foreground.'))
