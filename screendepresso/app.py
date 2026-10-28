@@ -8,6 +8,7 @@ from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QI
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
+from .documents import CaptureTabs
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
 from .platform_support import capture_desktop, data_directory, global_hotkeys_available
@@ -128,7 +129,8 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(STYLE)
         self.resize(1280, 840)
         self.history = History(self.settings.directory)
-        self.canvas = Canvas()
+        self.tabs = CaptureTabs(self)
+        self._active_canvas = None
         self.tool_actions = {}
         self.tool_group = QActionGroup(self)
         self.tool_group.setExclusive(True)
@@ -152,8 +154,8 @@ class MainWindow(QMainWindow):
         add_action(ribbon, tr('Copy image'), 'copy', self.copy, '#54894d', 'Ctrl+C')
         add_action(ribbon, tr('Paste image'), '+', self.paste, '#54894d', 'Ctrl+V')
         ribbon.addSeparator()
-        add_action(ribbon, tr('Undo'), '↶', self.canvas.undo, '#b87b2d', 'Ctrl+Z')
-        add_action(ribbon, tr('Redo'), '↷', self.canvas.redo, '#b87b2d', 'Ctrl+Y')
+        add_action(ribbon, tr('Undo'), '↶', lambda: self.canvas.undo(), '#b87b2d', 'Ctrl+Z')
+        add_action(ribbon, tr('Redo'), '↷', lambda: self.canvas.redo(), '#b87b2d', 'Ctrl+Y')
         add_action(ribbon, tr('Crop'), 'crop', lambda: self.choose_tool('recorte'))
         ribbon.addSeparator()
         add_action(ribbon, tr('Full screen'), '▣', lambda: self.capture('tela'))
@@ -181,17 +183,13 @@ class MainWindow(QMainWindow):
             self.color_actions[name] = color_action
             button.setMenu(menu)
             button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-        self.canvas.marker_color_changed.connect(self.display_marker_color)
-        self.canvas.rectangle_color_changed.connect(self.display_rectangle_color)
-        self.canvas.arrow_color_changed.connect(self.display_arrow_color)
         self.display_marker_color(self.canvas.marker_color)
         self.display_rectangle_color(self.canvas.rectangle_color)
         self.display_arrow_color(self.canvas.arrow_color)
         self.tool_actions[self.canvas.tool].setChecked(True)
-        self.canvas.tool_changed.connect(self.sync_tool)
         delete_action = QAction(tr('Delete object (Delete)'), self)
         delete_action.setShortcut(QKeySequence('Delete'))
-        delete_action.triggered.connect(self.canvas.delete_selected)
+        delete_action.triggered.connect(lambda: self.canvas.delete_selected())
         self.addAction(delete_action)
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -223,10 +221,9 @@ class MainWindow(QMainWindow):
         self.blur_strength.setToolTip(tr('Blur strength (1–100)'))
         self.blur_strength.setRange(1, 100)
         self.blur_strength.setValue(14)
-        self.blur_strength.valueChanged.connect(self.canvas.set_blur_radius)
+        self.blur_strength.valueChanged.connect(lambda value: self.canvas.set_blur_radius(value))
         self.blur_slider.valueChanged.connect(self.blur_strength.setValue)
         self.blur_strength.valueChanged.connect(self.blur_slider.setValue)
-        self.canvas.blur_selected.connect(self.display_blur_radius)
         blur_layout.addWidget(self.blur_strength)
         blur_action = QWidgetAction(self.blur_menu)
         blur_action.setDefaultWidget(blur_panel)
@@ -235,10 +232,7 @@ class MainWindow(QMainWindow):
         blur_button.setMenu(self.blur_menu)
         blur_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         layout.addWidget(options)
-        self.scroll = QScrollArea()
-        self.scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.scroll.setWidget(self.canvas)
-        layout.addWidget(self.scroll, 1)
+        layout.addWidget(self.tabs, 1)
         self.setCentralWidget(container)
         self.list = QListWidget()
         self.list.setToolTip(tr('Click a capture to open it in the editor.'))
@@ -260,7 +254,18 @@ class MainWindow(QMainWindow):
         self.version_label = QLabel(f'v{__version__}')
         self.version_label.setToolTip(tr('Application version'))
         self.statusBar().addPermanentWidget(self.version_label)
-        self.canvas.changed.connect(self.update_dimensions)
+        self.tabs.currentChanged.connect(self.tab_changed)
+        self.tabs.tabCloseRequested.connect(self.close_tab)
+        for label, shortcut, callback in [
+            ('Close tab', 'Ctrl+W', lambda: self.close_tab(self.tabs.currentIndex())),
+            ('Next tab', 'Ctrl+Tab', lambda: self.tabs.cycle(1)),
+            ('Previous tab', 'Ctrl+Shift+Tab', lambda: self.tabs.cycle(-1)),
+        ]:
+            action = QAction(tr(label), self)
+            action.setShortcut(QKeySequence(shortcut))
+            action.triggered.connect(callback)
+            self.addAction(action)
+        self.tab_changed(self.tabs.currentIndex())
         self.refresh()
         self.hotkeys = Hotkeys()
         self.hotkeys.capture.connect(self.capture)
@@ -300,6 +305,59 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.raise_()
         self.activateWindow()
+
+    @property
+    def canvas(self):
+        return self.tabs.canvas
+
+    @property
+    def scroll(self):
+        return self.tabs.currentWidget()
+
+    def tab_changed(self, index):
+        if index < 0:
+            return
+        if self._active_canvas is not None and self._active_canvas is not self.canvas:
+            self._active_canvas.finish_text()
+        canvas = self.canvas
+        if not canvas.property('windowSignalsConnected'):
+            for signal, callback in [
+                (canvas.changed, self.update_dimensions),
+                (canvas.tool_changed, self.sync_tool),
+                (canvas.marker_color_changed, self.display_marker_color),
+                (canvas.rectangle_color_changed, self.display_rectangle_color),
+                (canvas.arrow_color_changed, self.display_arrow_color),
+                (canvas.blur_selected, self.display_blur_radius),
+            ]:
+                signal.connect(lambda *args, c=canvas, f=callback: f(*args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
+            canvas.setProperty('windowSignalsConnected', True)
+        self._active_canvas = canvas
+        self.sync_tool(canvas.tool)
+        self.display_marker_color(canvas.marker_color)
+        self.display_rectangle_color(canvas.rectangle_color)
+        self.display_arrow_color(canvas.arrow_color)
+        selected = canvas.objects[canvas.selected] if canvas.selected is not None else None
+        self.display_blur_radius(selected['radius'] if selected is not None and selected['kind'] == 'desfoque' else canvas.blur_radius)
+        self.update_dimensions()
+        self.tabs.retranslate()
+
+    def close_tab(self, index):
+        if index < 0:
+            return
+        self.tabs.setCurrentIndex(index)
+        self.canvas.finish_text()
+        if self.tabs.is_dirty(self.tabs.currentWidget()):
+            answer = QMessageBox.question(
+                self, tr('Close tab'), tr('Save changes before closing this tab?'),
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save)
+            if answer == QMessageBox.StandardButton.Cancel:
+                return
+            if answer == QMessageBox.StandardButton.Save and not self.save():
+                return
+        # Clear the reference before Qt destroys the closed canvas.
+        self._active_canvas = None
+        self.tabs.remove_document(index)
 
     def activate_existing_instance(self):
         self.open_editor()
@@ -418,7 +476,10 @@ class MainWindow(QMainWindow):
         self.color_actions['numero'].setIcon(icon)
 
     def update_dimensions(self):
-        self.dimensions.setText(f'{self.canvas.base.width()} × {self.canvas.base.height()} px • 100%')
+        if self.canvas.base.isNull():
+            self.dimensions.setText(tr('No image • Capture a screen to get started'))
+        else:
+            self.dimensions.setText(f'{self.canvas.base.width()} × {self.canvas.base.height()} px • 100%')
 
     def display_blur_radius(self, radius):
         self.blur_strength.blockSignals(True)
@@ -444,6 +505,7 @@ class MainWindow(QMainWindow):
             raise
         set_language(self.settings.language)
         self.sync_tool(self.canvas.tool)
+        self.tabs.retranslate()
         self.history = History(directory)
         self.refresh()
         self.show_shortcuts()
@@ -454,7 +516,12 @@ class MainWindow(QMainWindow):
             self.list.addItem(path.name)
 
     def open_history(self, item):
-        self.canvas.load(QImage(str(self.history.directory / item.text())))
+        path = self.history.directory / item.text()
+        image = QImage(str(path))
+        if image.isNull():
+            QMessageBox.warning(self, tr('History'), tr('Could not open this image.'))
+            return
+        self.tabs.open_image(image, path)
         self.update_dimensions()
 
     def capture(self, mode):
@@ -499,8 +566,8 @@ class MainWindow(QMainWindow):
     def finish_capture(self, image):
         self.open_editor()
         try:
-            self.history.save(image)
-            self.canvas.load(image)
+            path = self.history.save(image)
+            self.tabs.open_image(image, path, capture=True)
             self.update_dimensions()
             self.refresh()
         except OSError as exc:
@@ -520,19 +587,23 @@ class MainWindow(QMainWindow):
     def save(self):
         self.canvas.finish_text()
         if self.canvas.image.isNull():
-            return
+            return False
         path, _ = QFileDialog.getSaveFileName(self, tr('Save image'), str(self.history.directory / 'captura.png'), 'PNG (*.png);;JPEG (*.jpg *.jpeg)')
         if path:
             if not Path(path).suffix:
                 path += '.png'
             if not self.canvas.image.save(path):
                 QMessageBox.warning(self, tr('Save'), tr('Could not save to this path or format.'))
+                return False
             else:
+                self.tabs.mark_saved(path)
                 try:
                     self.history.save(self.canvas.image)
                     self.refresh()
                 except OSError as exc:
                     QMessageBox.warning(self, tr('History'), str(exc))
+                return True
+        return False
 
 def main():
     if '--version' in sys.argv:
@@ -578,7 +649,16 @@ def run_application(app, instance):
         window.copy()
         if QApplication.clipboard().image() != image or window.list.count() < 1:
             raise RuntimeError('Smoke test failed')
-        print('Interface, histórico e clipboard: OK (offscreen)', flush=True)
+        second = QImage(120, 80, QImage.Format.Format_ARGB32)
+        second.fill(QColor('blue'))
+        window.finish_capture(second)
+        window.copy()
+        if window.tabs.count() != 2 or QApplication.clipboard().image() != second:
+            raise RuntimeError('Capture tabs smoke test failed')
+        window.tabs.setCurrentIndex(0)
+        if window.canvas.image != image:
+            raise RuntimeError('First capture was lost after opening another tab')
+        print('Interface, abas, histórico e clipboard: OK (offscreen)', flush=True)
         QTimer.singleShot(100, window.request_quit)
     sys.exit(app.exec())
 if __name__ == '__main__':

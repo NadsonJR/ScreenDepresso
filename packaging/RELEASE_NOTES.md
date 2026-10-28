@@ -1,3 +1,12 @@
+## Novidades da versão 0.6.0
+
+- Várias capturas abertas em abas, com edição, seleção, cores e desfazer/refazer independentes.
+- Novas capturas abrem em outra aba sem substituir a edição atual.
+- Abas podem ser reordenadas arrastando; Ctrl+Tab e Ctrl+Shift+Tab alternam entre capturas e Ctrl+W fecha a aba atual.
+- Aviso para salvar, descartar ou cancelar ao fechar uma aba com alterações. Cancelar o salvamento mantém a aba aberta.
+- Histórico abre capturas em abas e reutiliza a aba existente quando a imagem já está aberta.
+- Salvar, copiar, colar, recortar e os controles de edição atuam na aba ativa.
+
 ## Novidades da versão 0.5.2
 
 - Pillow atualizado para 13.0.0, com correções de segurança.

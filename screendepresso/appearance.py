@@ -25,6 +25,9 @@ QPushButton:hover { background: #4a5870; }
 QTabWidget::pane { border: 1px solid #475163; }
 QTabBar::tab { background: #30343d; padding: 10px 18px; }
 QTabBar::tab:selected { background: #3d5270; }
+QTabWidget#captureTabs::pane { border: 0; }
+QTabWidget#captureTabs QTabBar::tab { min-width: 100px; max-width: 220px; padding: 9px 12px; margin-right: 2px; }
+QTabWidget#captureTabs QTabBar::tab:hover { background: #414854; }
 QSlider::groove:horizontal { background: #566277; height: 6px; border-radius: 3px; }
 QSlider::handle:horizontal { background: #80b8ff; border: 1px solid #bedbff; width: 14px; margin: -5px 0; border-radius: 7px; }
 QComboBox QAbstractItemView { background: #1c2028; color: #e5e7eb; selection-background-color: #36577d; }

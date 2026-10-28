@@ -117,6 +117,18 @@ CATALOG.update({
  'Could not start the application activation channel.': 'Não foi possível iniciar o canal de ativação do aplicativo.',
  'ScreenDepresso is already running. Open it from the tray or taskbar.': 'O ScreenDepresso já está em execução. Abra-o pela bandeja ou pela barra de tarefas.',
 })
+CATALOG.update({
+ 'New capture': 'Nova captura',
+ 'Capture {number}': 'Captura {number}',
+ 'Switch between captures. Drag tabs to reorder.': 'Alterne entre capturas. Arraste as abas para reordenar.',
+ 'Close tab': 'Fechar aba',
+ 'Close Tab': 'Fechar aba',
+ 'Next tab': 'Próxima aba',
+ 'Previous tab': 'Aba anterior',
+ 'Save changes before closing this tab?': 'Salvar alterações antes de fechar esta aba?',
+ 'Discard': 'Descartar', '&Discard': '&Descartar',
+ 'Could not open this image.': 'Não foi possível abrir esta imagem.',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None
@@ -154,6 +166,9 @@ def translate_tree(root):
         if isinstance(widget, (QDockWidget, QToolBar)):
             widget.setWindowTitle(tr(widget.windowTitle()))
     for tabs in root.findChildren(QTabWidget):
+        if tabs.objectName() == 'captureTabs':
+            tabs.retranslate()
+            continue
         for index in range(tabs.count()):
             tabs.setTabText(index, tr(tabs.tabText(index)))
             tabs.setTabToolTip(index, tr(tabs.tabToolTip(index)))

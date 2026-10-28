@@ -23,7 +23,7 @@ Com `uv`, use `uv sync --frozen --extra dev` e `uv run screendepresso`.
 - Editor: escolha a ferramenta e arraste na imagem. Texto pede o conteúdo ao clicar. Use Desfazer para reverter operações.
 - Copiar envia a versão editada para a área de transferência. Mantenha o aplicativo aberto para servir os dados da área de transferência no X11.
 - Salvar exporta PNG/JPEG e adiciona a versão editada ao histórico.
-- Capturas originais são persistidas automaticamente em `$XDG_DATA_HOME/screendepresso`, ou `~/.local/share/screendepresso`. Clique no histórico para abrir uma imagem; alterações ainda não salvas são descartadas ao trocar de imagem.
+- Capturas originais são persistidas automaticamente em `$XDG_DATA_HOME/screendepresso`, ou `~/.local/share/screendepresso`. Cada captura abre em uma aba própria. Clique no histórico para abrir uma imagem em outra aba ou voltar à aba existente, preservando as edições.
 
 ## Limitações atuais
 
@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.5.2)
+## Instalador e atualizações (v0.6.0)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.5.2_amd64.deb
+sudo apt install ./screendepresso_0.6.0_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.5.2` e `git push origin v0.5.2`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.0` e `git push origin v0.6.0`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.5.2_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.6.0_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -180,3 +180,11 @@ O aplicativo permite apenas uma instância por perfil de usuário, tanto no Wind
 A proteção usa uma trava no diretório das preferências e um canal local de ativação restrito ao usuário. A trava não expira enquanto o processo permanece vivo, mesmo após muito tempo minimizado. Encerrar libera a trava; depois de uma queda ou encerramento forçado, a próxima abertura recupera a trava e o canal abandonados automaticamente. Não é necessário excluir arquivos manualmente.
 
 Se a primeira instância ainda estiver iniciando, a ativação será entregue quando ela estiver pronta. Se estiver em execução mas seu canal de ativação não responder, a segunda abertura apenas informa que o aplicativo já está aberto; ela não inicia uma instância adicional. O comando `--version` continua disponível sem abrir o editor.
+
+## Abas de capturas (0.6.0)
+
+Cada print fica em uma aba, sem substituir a captura anterior. Alterne entre elas clicando no título ou usando **Ctrl+Tab** / **Ctrl+Shift+Tab**. Arraste as abas para reordenar.
+
+Cada aba mantém seus objetos editáveis, seleção, intensidade de desfoque, cores, posição de rolagem e histórico de desfazer/refazer. Salvar, copiar, colar e os atalhos de edição atuam somente na aba ativa. Abrir uma captura já aberta pelo histórico seleciona a aba existente.
+
+Um **asterisco** no título indica alterações não salvas. Use o botão de fechar na aba ou **Ctrl+W**; se houver alterações, escolha salvar, descartar ou cancelar. Fechar a última aba deixa uma aba vazia pronta para a próxima captura. Fechar uma aba não exclui imagens do histórico. As abas ficam na memória durante a sessão; ao encerrar o aplicativo, salve as edições que deseja manter.
