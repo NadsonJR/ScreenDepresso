@@ -1,7 +1,7 @@
 import os
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 from PySide6.QtCore import QEvent
-from PySide6.QtGui import QHelpEvent
+from PySide6.QtGui import QHelpEvent, QKeySequence
 from PySide6.QtWidgets import QApplication, QToolBar, QToolTip
 from screendepresso.app import MainWindow
 from screendepresso.settings import SettingsDialog
@@ -25,14 +25,14 @@ def test_hover_descriptions_and_shortcuts_are_visible_and_translated(tmp_path, m
                 if not action.isSeparator():
                     assert action.toolTip()
         save = next(a for a in ribbon.actions() if a.text() == 'Save')
-        assert save.toolTip() == 'Save (Ctrl+S)'
+        assert save.toolTip() == f"Save ({QKeySequence('Ctrl+S').toString(QKeySequence.SequenceFormat.NativeText)})"
         button = tools.widgetForAction(window.tool_actions['numero'])
         position = button.rect().center()
         app.sendEvent(button, QHelpEvent(QEvent.Type.ToolTip, position, button.mapToGlobal(position)))
         assert QToolTip.text() == 'Numbered markers'
         QToolTip.hideText()
         window.apply_settings(window.settings.directory, window.settings.hotkeys, 'pt_BR')
-        assert save.toolTip() == 'Salvar (Ctrl+S)'
+        assert save.toolTip() == f"Salvar ({QKeySequence('Ctrl+S').toString(QKeySequence.SequenceFormat.NativeText)})"
         assert window.blur_strength.toolTip() == 'Intensidade do desfoque (1–100)'
         assert window.tool_actions['numero'].toolTip() == 'Marcadores numerados'
         settings = SettingsDialog(window)

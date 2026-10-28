@@ -1,13 +1,15 @@
-from .i18n import tr, mode_label, set_language, translate_tree
+from .i18n import tr, mode_label, set_language, translate_tree, native_help
 import os
 import sys
 from pathlib import Path
 from PySide6.QtCore import Qt, QRect, QTimer, QSize
-from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont
+from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont, QFontDatabase
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .documents import CaptureTabs
+from .presentation import ContextBar
+from .theme import TOKENS
 from .annotations import ARROW_STYLES, BUBBLE_STYLES
 from .markers import MARKER_STYLES
 from .settings import Settings, SettingsDialog
@@ -84,6 +86,9 @@ class MainWindow(QMainWindow):
         self._quitting = False
         self._capture_pending = False
         self.setPalette(dark_palette())
+        font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
+        font.setPixelSize(13)
+        self.setFont(font)
         self.setStyleSheet(STYLE)
         self.resize(1280, 840)
         self.history = History(self.settings.directory, self.settings.workspace_limit)
@@ -95,44 +100,52 @@ class MainWindow(QMainWindow):
         ribbon = QToolBar(tr('Actions'), self)
         ribbon.setObjectName('ribbon')
         ribbon.setMovable(False)
-        ribbon.setIconSize(QSize(42, 42))
+        self.ribbon = ribbon
+        ribbon.setIconSize(QSize(36, 36))
         ribbon.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, ribbon)
 
-        def add_action(bar, title, symbol, callback, color='#3878a8', shortcut=None):
-            action = QAction(toolbar_icon(symbol, color), title, self)
+        def add_action(bar, title, symbol, callback, color=TOKENS['accent'], shortcut=None):
+            action = QAction(toolbar_icon(symbol, color, plate=bar is ribbon), title, self)
             action.triggered.connect(callback)
             action.setProperty('hoverShortcut', shortcut or '')
-            action.setToolTip(title + (f' ({shortcut})' if shortcut else ''))
+            action.setToolTip(title + (f' ({QKeySequence(shortcut).toString(QKeySequence.SequenceFormat.NativeText)})' if shortcut else ''))
             if shortcut:
                 action.setShortcut(QKeySequence(shortcut))
             bar.addAction(action)
             return action
-        add_action(ribbon, tr('Save'), 'save', self.save, '#54894d', 'Ctrl+S')
-        add_action(ribbon, tr('Copy image'), 'copy', self.copy, '#54894d', 'Ctrl+C')
-        add_action(ribbon, tr('Paste image'), 'paste', self.paste, '#54894d', 'Ctrl+V')
+        add_action(ribbon, tr('Save'), 'save', self.save, TOKENS['success_surface'], 'Ctrl+S')
+        add_action(ribbon, tr('Copy image'), 'copy', self.copy, TOKENS['success_surface'], 'Ctrl+C')
+        add_action(ribbon, tr('Paste image'), 'paste', self.paste, TOKENS['success_surface'], 'Ctrl+V')
         ribbon.addSeparator()
-        add_action(ribbon, tr('Undo'), '↶', lambda: self.canvas.undo(), '#b87b2d', 'Ctrl+Z')
-        add_action(ribbon, tr('Redo'), '↷', lambda: self.canvas.redo(), '#b87b2d', 'Ctrl+Y')
+        add_action(ribbon, tr('Undo'), 'undo', lambda: self.canvas.undo(), TOKENS['warning_surface'], 'Ctrl+Z')
+        add_action(ribbon, tr('Redo'), 'redo', lambda: self.canvas.redo(), TOKENS['warning_surface'], 'Ctrl+Y')
         add_action(ribbon, tr('Crop'), 'crop', lambda: self.choose_tool('recorte'))
         ribbon.addSeparator()
-        full_screen_action = add_action(ribbon, tr('Full screen'), '▣', lambda: self.capture('tela'))
+        full_screen_action = add_action(ribbon, tr('Full screen'), 'monitor', lambda: self.capture('tela'))
         self.monitor_menu = QMenu(ribbon)
         self.monitor_menu.aboutToShow.connect(self.refresh_monitor_menu)
         full_screen_button = ribbon.widgetForAction(full_screen_action)
         full_screen_button.setMenu(self.monitor_menu)
         full_screen_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-        add_action(ribbon, tr('Window'), '▢', lambda: self.capture('janela'))
-        add_action(ribbon, tr('Region'), '⌗', lambda: self.capture('região'))
+        add_action(ribbon, tr('Window'), 'window', lambda: self.capture('janela'))
+        add_action(ribbon, tr('Region'), 'region', lambda: self.capture('região'))
         ribbon.addSeparator()
-        add_action(ribbon, tr('Settings'), '⚙', self.open_settings)
+        add_action(ribbon, tr('Settings'), 'settings', self.open_settings)
         tools = QToolBar(tr('Tools'), self)
         tools.setObjectName('tools')
         tools.setMovable(False)
-        tools.setIconSize(QSize(40, 40))
+        self.tools = tools
+        tools.setIconSize(QSize(32, 32))
+        tools.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tools)
         for name, label, symbol in [('selecionar', tr('Select / move'), 'hand'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('balao', tr('Speech balloon'), 'bubble:oval'), ('numero', tr('Numbered markers'), '1'), ('desfoque', tr('Blur outside selection'), 'blur')]:
-            action = add_action(tools, label, symbol, lambda checked=False, t=name: self.choose_tool(t))
+            action = add_action(tools, label, symbol, lambda checked=False, t=name: self.choose_tool(t),
+                                TOKENS['danger'] if name in ('seta','retângulo','numero','texto') else TOKENS['secondary'])
+            short = {'selecionar':'Select / move', 'seta':'Arrow', 'retângulo':'Rectangle', 'texto':'Text',
+                     'balao':'Balloon', 'numero':'Numbers', 'desfoque':'Blur'}[name]
+            action.setProperty('toolLabel', short)
+            action.setIconText(tr(short))
             action.setCheckable(True)
             self.tool_group.addAction(action)
             self.tool_actions[name] = action
@@ -160,18 +173,14 @@ class MainWindow(QMainWindow):
         delete_action.triggered.connect(lambda: self.canvas.delete_selected())
         self.addAction(delete_action)
         container = QWidget()
+        container.setObjectName('editorShell')
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        options = QWidget()
-        options.setObjectName('toolOptions')
-        options.setStyleSheet('QWidget#toolOptions { background: #292e38; }')
-        options_row = QHBoxLayout(options)
         self.tool_hint = QLabel(tr('Arrow • Drag on the image to draw'))
         self.tool_hint.setWordWrap(True)
         self.tool_hint.setMinimumWidth(0)
         self.tool_hint.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        options_row.addWidget(self.tool_hint, 1)
         self.blur_menu = QMenu(tools)
         self.blur_menu.setObjectName('blurMenu')
         blur_panel = QWidget()
@@ -210,7 +219,8 @@ class MainWindow(QMainWindow):
         blur_button = tools.widgetForAction(self.tool_actions['desfoque'])
         blur_button.setMenu(self.blur_menu)
         blur_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-        layout.addWidget(options)
+        self.context_bar = ContextBar(self)
+        layout.addWidget(self.context_bar)
         layout.addWidget(self.tabs, 1)
         self.setCentralWidget(container)
         self.workspace = WorkspaceView(self.history, self)
@@ -222,10 +232,15 @@ class MainWindow(QMainWindow):
         self.history_dock.setMinimumWidth(320)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.history_dock)
         history_action = self.history_dock.toggleViewAction()
-        history_action.setIcon(toolbar_icon('☷'))
+        history_action.setIcon(toolbar_icon('workspace'))
         history_action.setText(tr('Workspace'))
         history_action.setToolTip(tr('Workspace'))
         ribbon.addAction(history_action)
+        for bar in (ribbon, tools):
+            for action in bar.actions():
+                button = bar.widgetForAction(action)
+                if isinstance(button, QToolButton):
+                    button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
         zoom_panel = QWidget()
         zoom_layout = QHBoxLayout(zoom_panel)
@@ -242,7 +257,9 @@ class MainWindow(QMainWindow):
         self.zoom_label.setMinimumWidth(45)
         zoom_layout.addWidget(self.zoom_label)
         zoom_layout.addStretch()
-        self.statusBar().addPermanentWidget(zoom_panel, 1)
+        self.statusBar().addPermanentWidget(zoom_panel, 0)
+        self.tool_hint.setWordWrap(False)
+        self.statusBar().addPermanentWidget(self.tool_hint, 1)
         self.statusBar().addPermanentWidget(self.dimensions)
         from . import __version__
         self.version_label = QLabel(f'v{__version__}')
@@ -277,7 +294,7 @@ class MainWindow(QMainWindow):
                 self.hotkeys.configure(self.settings.hotkeys)
             except Exception as exc:
                 self.statusBar().showMessage(f"{tr('Hotkeys unavailable: ')}{exc}")
-        icon = QIcon.fromTheme('screendepresso', toolbar_icon('copy', '#c6384c'))
+        icon = toolbar_icon('camera', TOKENS['danger'])
         self.setWindowIcon(icon)
         self.tray = QSystemTrayIcon(icon, self)
         menu = QMenu(self)
@@ -337,7 +354,7 @@ class MainWindow(QMainWindow):
                 (canvas.marker_style_changed, self.display_marker_style),
                 (canvas.drop_failed, lambda message: self.statusBar().showMessage(message, 4000)),
             ]:
-                signal.connect(lambda *args, c=canvas, f=callback: f(*args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
+                signal.connect(lambda *args, c=canvas, f=callback: self.update_editor_controls(f, *args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
             canvas.setProperty('windowSignalsConnected', True)
         self._active_canvas = canvas
         self.sync_tool(canvas.tool)
@@ -355,6 +372,32 @@ class MainWindow(QMainWindow):
         self.display_marker_style()
         self.update_dimensions()
         self.tabs.retranslate()
+        self.context_bar.refresh()
+
+    def update_editor_controls(self, callback, *args):
+        callback(*args)
+        self.context_bar.refresh()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'tools'):
+            compact = self.width() < 1120
+            self.ribbon.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly if compact else Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            self.tools.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly if self.width() < 900 else Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            for action in self.tool_actions.values():
+                self.tools.widgetForAction(action).setFixedWidth(56 if self.width() < 900 else 176)
+
+    def open_image_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, tr('Open image'), str(self.history.directory),
+            tr('Images')+' (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff)', '', QFileDialog.Option.DontUseNativeDialog)
+        if not path:
+            return
+        image = read_image(path)
+        if image.isNull():
+            self.statusBar().showMessage(tr('Could not open this image.'), 4000)
+            return
+        self.tabs.open_image(image, path)
+        self.update_dimensions()
 
     def close_tab(self, index):
         if index < 0 or index >= self.tabs.count():
@@ -594,7 +637,7 @@ class MainWindow(QMainWindow):
     def display_bubble_format(self):
         values = self.current_bubble_format()
         self.bubble_styles[values['style']].setChecked(True)
-        self.tool_actions['balao'].setIcon(toolbar_icon('bubble:'+values['style']))
+        self.tool_actions['balao'].setIcon(toolbar_icon('bubble:'+values['style'], TOKENS['accent'], plate=False))
 
     def setup_text_menu(self, tools):
         button = tools.widgetForAction(self.tool_actions['texto'])
@@ -637,7 +680,7 @@ class MainWindow(QMainWindow):
         self.text_size.blockSignals(True)
         self.text_size.setValue(values.get('font_size', 24))
         self.text_size.blockSignals(False)
-        self.tool_actions['texto'].setIcon(toolbar_icon('A', values.get('color', '#ef233c')))
+        self.tool_actions['texto'].setIcon(toolbar_icon('A', values.get('color', '#ef233c'), plate=False))
         self.text_color_action.setIcon(toolbar_icon('A', values.get('color', '#ef233c')))
 
     def change_zoom(self, percent):
@@ -688,8 +731,11 @@ class MainWindow(QMainWindow):
                 action.setChecked(False)
             self.tool_group.setExclusive(True)
         hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp'), 'numero': tr('Numbers • Click for the next number; drag from the marker to its target'), 'balao': tr('Balloon • Drag to draw; move the tail handle to point at an object')}
-        self.tool_hint.setText(hints[name])
-        self.tool_hint.setToolTip(hints[name])
+        from .i18n import REVERSE
+        source = REVERSE.get(hints[name], hints[name])
+        self.tool_hint.setProperty('helpSource', source)
+        self.tool_hint.setText(native_help(source))
+        self.tool_hint.setToolTip(native_help(source))
 
     def choose_arrow_color(self):
         obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
@@ -701,7 +747,7 @@ class MainWindow(QMainWindow):
     def display_arrow_color(self, color):
         obj = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
         style = obj.get('style', 'classic') if obj is not None and obj['kind'] == 'seta' else self.canvas.arrow_style
-        icon = toolbar_icon('arrow:'+style, color)
+        icon = toolbar_icon('arrow:'+style, color, plate=False)
         self.tool_actions['seta'].setIcon(icon)
         self.color_actions['seta'].setIcon(icon)
 
@@ -716,7 +762,7 @@ class MainWindow(QMainWindow):
         canvas = self.canvas
         obj = canvas.objects[canvas.selected] if canvas.selected is not None else None
         values = obj if obj is not None and obj['kind'] == 'retângulo' else canvas.rectangle_format
-        icon = toolbar_icon('rectangle:rounded' if values.get('rounded', False) else 'rectangle', color)
+        icon = toolbar_icon('rectangle:rounded' if values.get('rounded', False) else 'rectangle', color, plate=False)
         self.tool_actions['retângulo'].setIcon(icon)
         self.color_actions['retângulo'].setIcon(icon)
 
@@ -726,7 +772,7 @@ class MainWindow(QMainWindow):
             self.canvas.set_marker_color(color)
 
     def display_marker_color(self, color):
-        icon = toolbar_icon('marker:'+self.current_marker_style(), color)
+        icon = toolbar_icon('marker:'+self.current_marker_style(), color, plate=False)
         self.tool_actions['numero'].setIcon(icon)
         self.color_actions['numero'].setIcon(icon)
 
@@ -962,6 +1008,8 @@ def run_application(app, instance):
     app.aboutToQuit.connect(instance.release)
     window.show()
     if '--smoke-test' in sys.argv:
+        if not window.scroll.empty_state.isVisible() or window.context_bar.title.text() != tr('Arrow'):
+            raise RuntimeError('Visual identity and empty editor smoke test failed')
         settings = window.open_settings(updates=True)
         window.update_panel.on_completed('check', None)
         QApplication.processEvents()

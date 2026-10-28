@@ -6,9 +6,9 @@ from .i18n import tr
 def installed_release_notes():
     return tr('What’s new in version {version}').format(version=__version__) + '\n\n' + '\n\n'.join(
         '• ' + text for text in (
-            tr('Update controls appear side by side, with the installed version centered above them.'),
-            tr('Arrow, rectangle, text, balloon and blur tools stay active for repeated annotations. Choose Select/Move to edit existing objects.'),
-            tr('macOS 15 or later is supported on Apple Silicon and Intel, with native global hotkeys, screen permissions, window previews and DMG installers.'),
-            tr('On macOS, updates are verified before opening the disk image. Quit the old app and replace it in Applications.'),
+            tr('Updated dark interface following the ScreenDepresso visual identity guide, with consistent colors, typography and icons.'),
+            tr('Labeled tools and a contextual properties bar preserve existing annotation controls, shortcuts and continuous drawing.'),
+            tr('The empty editor offers capture, open, paste and image dropping. Compact windows use smaller toolbars and scrollable properties.'),
+            tr('Version 0.7.0 remains available as a separate download if you prefer the previous design. Reinstall it manually to roll back.'),
         )
     )

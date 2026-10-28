@@ -28,10 +28,10 @@ def main():
     build.mkdir(exist_ok=True)
     icon = Image.new('RGBA', (256, 256))
     draw = ImageDraw.Draw(icon)
-    draw.rounded_rectangle((16,16,240,240), radius=52, fill='#172033')
-    draw.rounded_rectangle((58,74,198,180), radius=16, outline='#fb7185', width=14)
-    draw.ellipse((98,96,158,156), outline='#fb7185', width=12)
-    draw.line([(88,74),(102,50),(154,50),(168,74)], fill='#fb7185', width=14)
+    draw.rounded_rectangle((16,16,240,240), radius=52, fill='#EF4059')
+    draw.rounded_rectangle((58,74,198,180), radius=16, outline='#F4F7FB', width=14)
+    draw.ellipse((98,96,158,156), outline='#F4F7FB', width=12)
+    draw.line([(88,74),(102,50),(154,50),(168,74)], fill='#F4F7FB', width=14)
     icon.save(build/'screendepresso.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
     translation = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))/'qtbase_pt_BR.qm'
     if not translation.is_file():

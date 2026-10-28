@@ -10,7 +10,7 @@ from PySide6.QtCore import (Qt, QSize, QTimer, QFile, QMimeData, QUrl,
 from PySide6.QtGui import QIcon, QImage, QImageReader, QDrag, QPixmap
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QToolButton, QLabel, QMenu,
                                QListWidget, QListWidgetItem, QListView, QAbstractItemView)
-from .i18n import tr
+from .i18n import tr, native_help
 from .appearance import icon
 
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tif', '.tiff'}
@@ -241,7 +241,7 @@ class WorkspaceView(QWidget):
         path = self.selected_path()
         menu = QMenu(self)
         duplicate = menu.addAction(tr('Duplicate'))
-        duplicate.setToolTip(tr('Duplicate selected image (Ctrl+D)'))
+        duplicate.setToolTip(native_help('Duplicate selected image (Ctrl+D)'))
         duplicate.triggered.connect(lambda: self.duplicate_selected(path))
         delete = menu.addAction(tr('Delete'))
         delete.setToolTip(tr('Move selected image to the system trash (Delete)'))

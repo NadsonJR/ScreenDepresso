@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.7.0)
+## Instalador e atualizações (v0.7.1)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.7.0_amd64.deb
+sudo apt install ./screendepresso_0.7.1_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Settings → Updates → Check for updates → Download and install**. Todo o fluxo acontece na própria aba, com a opção de manter a versão atual. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições e use **Restart application** ao concluir a atualização. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.7.0` e `git push origin v0.7.0`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.7.1` e `git push origin v0.7.1`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.7.0_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.7.1_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -272,3 +272,20 @@ Os atalhos globais usam Carbon, sem Xlib e sem monitorar todas as teclas. O padr
 O atualizador escolhe o DMG da arquitetura em execução e verifica origem, tamanho e SHA-256. Ao terminar, **Open installer** abre o DMG. Salve suas edições, encerre o app, substitua-o em Aplicativos e abra a nova versão. A substituição pelo Finder é manual nesta primeira versão; as configurações e o workspace são preservados.
 
 Os testes automatizados do macOS não concedem permissão de gravação de tela: a validação real de capturas, atalhos físicos, múltiplos monitores e permissões deve ser feita numa sessão de usuário no Mac.
+
+## Identidade visual e retorno ao design anterior (0.7.1)
+
+A 0.7.1 aplica o guia de identidade visual: paleta escura, fonte de interface do sistema, ícones desenhados com traços consistentes, barra superior agrupada, ferramentas com rótulos, propriedades contextuais e rodapé legível. Botões e inputs têm foco visível. Os estados ativos usam uma variação mais escura do azul para manter contraste AA nos rótulos. O desenho dos controles nativos da janela é preservado em cada plataforma.
+
+A barra contextual expõe apenas propriedades já suportadas pelas ferramentas atuais: cores e estilos de setas, espessura/cantos de retângulos, fonte/tamanho/cor do texto, modelos e cores de balões/marcadores e intensidade/modo do desfoque. Os menus dos próprios botões continuam disponíveis. Os exemplos de novas ferramentas e propriedades citados no mockup não adicionam novas operações ao mecanismo de edição nesta versão.
+
+Sem imagem, o editor oferece **Capture screen**, **Open image** e **Paste image**, além de aceitar arraste. Abrir uma imagem não a move nem a duplica no Workspace. Em janelas compactas, as barras usam ícones com tooltips e o overflow nativo do Qt; a barra contextual admite rolagem horizontal. A interface respeita escalonamento HiDPI/Retina e usa símbolos nativos de atalhos no macOS.
+
+### Downloads separados
+
+- [0.7.1 — novo design](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.1)
+- [0.7.0 — design anterior, mantido para rollback](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.0)
+
+Cada release tem seus próprios instaladores Linux, Windows e macOS Intel/Apple Silicon, manifesto e checksums. A 0.7.1 não substitui os arquivos publicados da 0.7.0. O atualizador oferece a versão mais recente; não faz downgrade automaticamente.
+
+Para voltar: salve/exporte as edições abertas, encerre o aplicativo, baixe o instalador da **0.7.0** correspondente ao seu sistema e reinstale-o. No Ubuntu, use `sudo apt install --allow-downgrades ./screendepresso_0.7.0_amd64.deb`; no Windows execute o instalador 0.7.0; no macOS substitua o app em Aplicativos pelo do DMG 0.7.0. As versões usam os mesmos diretórios e configurações compatíveis; abas e objetos não exportados não sobrevivem ao encerramento. Não é necessário excluir o Workspace nem as configurações para trocar de versão.

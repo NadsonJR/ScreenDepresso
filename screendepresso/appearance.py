@@ -2,55 +2,99 @@
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QFont, QPalette, QPainterPath
 
-STYLE = '''
-QMainWindow, QDialog { background: #252830; color: #e5e7eb; }
-QWidget { color: #e5e7eb; }
-QMenuBar, QMenu, QToolBar, QStatusBar { background: #30343d; color: #e5e7eb; }
-QMenuBar { padding: 3px; }
-QMenuBar::item:selected, QMenu::item:selected { background: #465164; }
-QToolBar { border: 0; spacing: 8px; padding: 10px; }
-QToolBar#tools { background: #30343d; padding: 8px; spacing: 8px; }
-QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 5px; }
-QToolButton:hover { background: #414854; border-color: #64748b; }
-QToolButton:checked { background: #3b5273; border-color: #7bb5ff; }
-QToolButton:disabled { color: #737b8b; }
-QScrollArea, QScrollArea > QWidget > QWidget { background: #171a20; border: 0; }
-QDockWidget { color: #e5e7eb; }
-QDockWidget::title { background: #30343d; padding: 8px; }
-QListWidget, QLineEdit, QKeySequenceEdit, QSpinBox, QComboBox, QTextBrowser { background: #1c2028; color: #e5e7eb; border: 1px solid #475163; border-radius: 4px; padding: 6px; }
-QListWidget::item { padding: 10px; }
-QListWidget::item:selected { background: #36577d; }
-QPushButton { background: #3b4351; border: 1px solid #566277; border-radius: 5px; padding: 8px 12px; }
-QPushButton:hover { background: #4a5870; }
-QProgressBar { background: #171a20; color: #f8fafc; border: 1px solid #475163; text-align: center; min-height: 18px; }
-QProgressBar::chunk { background: #3878a8; }
-QTabWidget::pane { border: 1px solid #475163; }
-QTabBar::tab { background: #30343d; padding: 10px 18px; }
-QTabBar::tab:selected { background: #3d5270; }
-QTabWidget#captureTabs::pane { border: 0; }
-QTabWidget#captureTabs QTabBar::tab { min-width: 100px; max-width: 220px; padding: 9px 12px; margin-right: 2px; }
-QTabWidget#captureTabs QTabBar::tab:hover { background: #414854; }
-QSlider::groove:horizontal { background: #566277; height: 6px; border-radius: 3px; }
-QSlider::handle:horizontal { background: #80b8ff; border: 1px solid #bedbff; width: 14px; margin: -5px 0; border-radius: 7px; }
-QComboBox QAbstractItemView { background: #1c2028; color: #e5e7eb; selection-background-color: #36577d; }
-QToolTip { background: #111827; color: #f8fafc; border: 1px solid #64748b; padding: 6px; }
-QScrollBar:vertical { background: #252830; width: 12px; }
-QScrollBar::handle:vertical { background: #586174; min-height: 30px; border-radius: 5px; }
-QScrollBar:horizontal { background: #252830; height: 12px; }
-QScrollBar::handle:horizontal { background: #586174; min-width: 30px; border-radius: 5px; }
-'''
+from .theme import TOKENS, stylesheet
+
+STYLE = stylesheet()
 
 
-def icon(symbol, color='#3878a8'):
-    pixmap = QPixmap(48, 48)
+def icon(symbol, color=None, plate=True, size=48):
+    color = color or TOKENS['accent']
+    if color == 'transparent':
+        plate, color = False, TOKENS['secondary']
+    result = QIcon()
+    for scale in (1, 2):
+        result.addPixmap(_icon_pixmap(symbol, color, plate, scale, size))
+        if not plate:
+            selected = _icon_pixmap(symbol, TOKENS['text'], False, scale, size)
+            result.addPixmap(selected, QIcon.Mode.Normal, QIcon.State.On)
+            result.addPixmap(selected, QIcon.Mode.Active, QIcon.State.On)
+    return result
+
+
+def _icon_pixmap(symbol, color, plate, scale, size):
+    pixmap = QPixmap(size*scale, size*scale)
     pixmap.fill(Qt.GlobalColor.transparent)
     p = QPainter(pixmap)
+    p.scale(scale*size/48, scale*size/48)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(color))
-    p.drawRoundedRect(QRectF(2, 2, 44, 44), 7, 7)
-    p.setPen(QPen(QColor('#f8fafc'), 2.5))
-    if symbol == 'refresh':
+    p.setBrush(QColor(color) if plate else Qt.BrushStyle.NoBrush)
+    if plate:
+        p.drawRoundedRect(QRectF(2, 2, 44, 44), 8, 8)
+    ink = TOKENS['text'] if plate else color
+    pen = QPen(QColor(ink), 2.5)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    if symbol in ('undo', 'redo'):
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        if symbol == 'redo':
+            p.translate(48, 0)
+            p.scale(-1, 1)
+        path = QPainterPath(QPointF(13, 19))
+        path.lineTo(28, 19)
+        path.cubicTo(39, 19, 39, 35, 28, 35)
+        path.lineTo(22, 35)
+        p.drawPath(path)
+        p.drawPolyline([QPointF(20, 12), QPointF(12, 19), QPointF(20, 26)])
+    elif symbol in ('monitor', 'window', 'region', 'image', 'folder', 'workspace', 'settings', 'camera'):
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        if symbol == 'monitor':
+            p.drawRoundedRect(QRectF(9, 11, 30, 22), 2, 2)
+            p.drawLine(24, 33, 24, 39)
+            p.drawLine(17, 39, 31, 39)
+        elif symbol == 'window':
+            p.drawRoundedRect(QRectF(10, 11, 28, 27), 3, 3)
+            p.drawLine(10, 18, 38, 18)
+            for x in (15, 20, 25):
+                p.drawPoint(x, 15)
+        elif symbol == 'region':
+            pen.setStyle(Qt.PenStyle.DashLine)
+            p.setPen(pen)
+            p.drawRect(12, 12, 24, 24)
+            p.setPen(QPen(QColor(ink), 2.5))
+            for x in (12, 36):
+                for y in (12, 36):
+                    p.fillRect(QRectF(x-3, y-3, 6, 6), QColor(ink))
+        elif symbol == 'workspace':
+            for y in (13, 24, 35):
+                p.drawRect(10, y-2, 4, 4)
+                p.drawLine(21, y, 38, y)
+        elif symbol == 'settings':
+            import math
+            gear = QPainterPath()
+            for i in range(32):
+                angle = math.pi*2*i/32
+                radius = 17 if i % 4 in (1, 2) else 13
+                point = QPointF(24+radius*math.cos(angle), 24+radius*math.sin(angle))
+                gear.moveTo(point) if i == 0 else gear.lineTo(point)
+            gear.closeSubpath()
+            p.drawPath(gear)
+            p.drawEllipse(QRectF(20, 20, 8, 8))
+        elif symbol == 'folder':
+            path = QPainterPath(QPointF(9, 15))
+            for x, y in ((20,15), (24,19), (39,19), (39,36), (9,36), (9,15)):
+                path.lineTo(x,y)
+            p.drawPath(path)
+        elif symbol == 'camera':
+            p.drawRoundedRect(QRectF(9, 15, 30, 23), 4, 4)
+            p.drawPolyline([QPointF(16, 15), QPointF(19, 10), QPointF(29, 10), QPointF(32, 15)])
+            p.drawEllipse(QRectF(18, 20, 12, 12))
+        else:
+            p.drawRoundedRect(QRectF(7, 8, 34, 32), 3, 3)
+            p.drawEllipse(QRectF(29, 14, 5, 5))
+            p.drawPolyline([QPointF(9, 35), QPointF(19, 24), QPointF(27, 31), QPointF(32, 26), QPointF(39, 35)])
+    elif symbol == 'refresh':
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawArc(QRectF(11, 11, 26, 26), 40*16, 285*16)
         p.drawPolyline([QPointF(27, 10), QPointF(35, 13), QPointF(34, 22)])
@@ -69,7 +113,7 @@ def icon(symbol, color='#3878a8'):
         p.drawLine(25, 13, 25, 17)
     elif symbol == 'copy':
         # Two overlapping sheets with folded corners, like the reference.
-        p.setBrush(QColor(color))
+        p.setBrush(QColor(color) if plate else QColor(TOKENS['surface']))
         back = QPainterPath()
         back.moveTo(20, 8)
         back.lineTo(28, 8)
@@ -103,7 +147,7 @@ def icon(symbol, color='#3878a8'):
     elif symbol == 'paste':
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(11, 10, 26, 29), 3, 3)
-        p.setBrush(QColor(color))
+        p.setBrush(QColor(color) if plate else QColor(TOKENS['surface']))
         p.drawRoundedRect(QRectF(18, 7, 12, 7), 2, 2)
         p.drawLine(17, 23, 31, 23)
         p.drawLine(17, 29, 28, 29)
@@ -142,7 +186,7 @@ def icon(symbol, color='#3878a8'):
         font.setPixelSize(19)
         font.setBold(True)
         p.setFont(font)
-        p.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, '1')
+        p.drawText(QRectF(0, 0, 48, 48), Qt.AlignmentFlag.AlignCenter, '1')
     elif symbol == 'rectangle' or symbol == 'rectangle:rounded':
         p.setBrush(Qt.BrushStyle.NoBrush)
         if symbol.endswith(':rounded'):
@@ -151,12 +195,16 @@ def icon(symbol, color='#3878a8'):
             p.drawRect(12, 15, 24, 18)
     elif symbol == 'arrow' or symbol.startswith('arrow:'):
         from .annotations import draw_arrow
-        draw_arrow(p, {'a': [13, 35], 'b': [35, 13], 'style': symbol.split(':')[1] if ':' in symbol else 'classic', 'color': '#f8fafc'}, head_length=11)
+        draw_arrow(p, {'a': [13, 35], 'b': [35, 13], 'style': symbol.split(':')[1] if ':' in symbol else 'classic', 'color': ink}, head_length=11)
     elif symbol == 'crop':
         p.drawLine(15, 10, 15, 33)
         p.drawLine(15, 33, 38, 33)
         p.drawLine(10, 15, 33, 15)
         p.drawLine(33, 15, 33, 38)
+    elif symbol == 'A':
+        p.drawLine(13, 12, 35, 12)
+        p.drawLine(24, 12, 24, 37)
+        p.drawLine(18, 37, 30, 37)
     elif symbol == 'blur':
         for x in (15, 24, 33):
             for y in (15, 24, 33):
@@ -166,21 +214,24 @@ def icon(symbol, color='#3878a8'):
         font.setPixelSize(27)
         font.setBold(True)
         p.setFont(font)
-        p.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, symbol)
+        p.drawText(QRectF(0, 0, 48, 48), Qt.AlignmentFlag.AlignCenter, symbol)
     p.end()
-    return QIcon(pixmap)
+    pixmap.setDevicePixelRatio(scale)
+    return pixmap
 
 
 def dark_palette():
     palette = QPalette()
-    for role, color in ((QPalette.ColorRole.Window, '#252830'),
-                        (QPalette.ColorRole.WindowText, '#e5e7eb'),
-                        (QPalette.ColorRole.Base, '#1c2028'),
-                        (QPalette.ColorRole.AlternateBase, '#30343d'),
-                        (QPalette.ColorRole.Text, '#e5e7eb'),
-                        (QPalette.ColorRole.Button, '#3b4351'),
-                        (QPalette.ColorRole.ButtonText, '#e5e7eb'),
-                        (QPalette.ColorRole.Highlight, '#36577d'),
-                        (QPalette.ColorRole.HighlightedText, '#ffffff')):
-        palette.setColor(role, QColor(color))
+    for role, token in ((QPalette.ColorRole.Window, 'app'),
+                        (QPalette.ColorRole.WindowText, 'text'),
+                        (QPalette.ColorRole.Base, 'app'),
+                        (QPalette.ColorRole.AlternateBase, 'surface'),
+                        (QPalette.ColorRole.Text, 'text'),
+                        (QPalette.ColorRole.Button, 'surface'),
+                        (QPalette.ColorRole.ButtonText, 'text'),
+                        (QPalette.ColorRole.Highlight, 'accent'),
+                        (QPalette.ColorRole.HighlightedText, 'text')):
+        palette.setColor(role, QColor(TOKENS[token]))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(TOKENS['secondary']))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(TOKENS['secondary']))
     return palette

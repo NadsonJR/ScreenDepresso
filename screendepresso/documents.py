@@ -6,13 +6,26 @@ from PySide6.QtWidgets import QScrollArea, QTabWidget, QMenu
 
 from .editor import Canvas
 from .i18n import tr
+from .presentation import EmptyState
 
 
 class CaptureScrollArea(QScrollArea):
-    def __init__(self):
+    def __init__(self, owner=None):
         super().__init__()
         self.setAcceptDrops(True)
         self.wheel_steps = 0.0
+        self.empty_state = EmptyState(owner, self.viewport()) if owner is not None else None
+
+    def sync_empty_state(self):
+        if self.empty_state is not None:
+            self.empty_state.setGeometry(self.viewport().rect())
+            self.empty_state.setVisible(self.widget().base.isNull())
+            self.empty_state.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'empty_state') and self.widget() is not None:
+            self.sync_empty_state()
 
     def dragEnterEvent(self, event):
         if self.widget().can_drop(event.mimeData()):
@@ -64,6 +77,7 @@ class CaptureTabs(QTabWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.owner = parent
         self.setObjectName('captureTabs')
         self.setDocumentMode(True)
         self.setMovable(True)
@@ -102,10 +116,11 @@ class CaptureTabs(QTabWidget):
         return self.currentWidget().widget()
 
     def add_document(self, image=None, path=None, capture=False):
-        page = CaptureScrollArea()
+        page = CaptureScrollArea(self.owner)
         page.setAlignment(Qt.AlignmentFlag.AlignCenter)
         canvas = Canvas()
         page.setWidget(canvas)
+        canvas.changed.connect(page.sync_empty_state)
         page.source_path = Path(path).resolve() if path is not None else None
         page.export_name = None
         page.is_capture = capture
@@ -118,6 +133,7 @@ class CaptureTabs(QTabWidget):
         self.addTab(page, '')
         self.update_title(page)
         self.setCurrentWidget(page)
+        page.sync_empty_state()
         return canvas
 
     def is_dirty(self, page):
@@ -160,6 +176,7 @@ class CaptureTabs(QTabWidget):
             page.is_capture = capture
             page.saved_state = self.canvas.snapshot()
             self.update_title(page)
+            page.sync_empty_state()
             return self.canvas
         return self.add_document(image, source, capture)
 

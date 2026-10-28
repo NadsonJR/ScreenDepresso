@@ -1,4 +1,4 @@
-from .i18n import tr
+from .i18n import tr, native_help
 """Retained annotations with undo/redo and non-destructive previews."""
 import copy
 import math
@@ -633,7 +633,8 @@ class Canvas(QWidget):
         editor.setObjectName('inlineText')
         editor.setFrameStyle(0)
         editor.setPlaceholderText(tr('Type here…'))
-        editor.setToolTip(tr('Ctrl+Enter confirms • Esc cancels • Click outside to confirm'))
+        editor.setProperty('helpSource', 'Ctrl+Enter confirms • Esc cancels • Click outside to confirm')
+        editor.setToolTip(native_help(editor.property('helpSource')))
         editor.document().setDocumentMargin(2)
         editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         editor.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

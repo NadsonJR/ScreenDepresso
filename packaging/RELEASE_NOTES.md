@@ -1,3 +1,16 @@
+## Novidades da versão 0.7.1
+
+- Nova identidade visual seguindo o guia: paleta escura, ícones consistentes, fonte de interface do sistema e controles de janela nativos.
+- Barra superior agrupada, ferramentas laterais com rótulos e seleção azul com contraste reforçado.
+- Barra contextual para as propriedades já existentes, sincronizada com a ferramenta, seleção, aba e desfazer/refazer. Menus laterais preservados.
+- Estado vazio com captura, abertura, colagem e arraste de imagens.
+- Layout compacto com ícones/overflow, rolagem de propriedades, tooltips traduzidos, atalhos nativos do macOS e suporte HiDPI/Retina.
+- Sem alterações nos formatos de imagem, diretórios, configurações ou mecanismos de captura.
+
+**Downloads independentes:** [0.7.1 — novo visual](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.1) e [0.7.0 — design anterior preservado para rollback](https://github.com/NadsonJR/ScreenDepresso/releases/tag/v0.7.0). Os instaladores da 0.7.0 permanecem intactos.
+
+Para voltar, salve as edições, encerre o app e reinstale a 0.7.0 do seu sistema. No Ubuntu: `sudo apt install --allow-downgrades ./screendepresso_0.7.0_amd64.deb`. No Windows: execute o instalador 0.7.0. No macOS: substitua o app pelo do DMG 0.7.0. Preserve os diretórios de capturas/configurações; o atualizador não faz downgrade automaticamente.
+
 ## Novidades da versão 0.7.0
 
 - Aba Atualizações com a versão instalada centralizada e botões lado a lado, incluindo as notas da versão instalada.

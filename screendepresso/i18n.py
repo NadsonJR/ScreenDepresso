@@ -1,7 +1,8 @@
 """English is the default; preferences select English or Brazilian Portuguese."""
 from pathlib import Path
+import sys
 from PySide6.QtCore import QTranslator, QLibraryInfo, QLocale
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QWidget, QApplication, QLabel, QAbstractButton, QLineEdit, QPlainTextEdit, QTabWidget, QDockWidget, QToolBar, QComboBox, QStatusBar
 
 # English source strings and their Brazilian Portuguese translations.
@@ -232,6 +233,21 @@ CATALOG.update({
  'macOS 15 or later is supported on Apple Silicon and Intel, with native global hotkeys, screen permissions, window previews and DMG installers.': 'Suporte ao macOS 15 ou posterior em Apple Silicon e Intel, com atalhos globais nativos, permissões de tela, prévias de janelas e instaladores DMG.',
  'On macOS, updates are verified before opening the disk image. Quit the old app and replace it in Applications.': 'No macOS, as atualizações são verificadas antes de abrir a imagem de disco. Encerre o app antigo e substitua-o em Aplicativos.',
 })
+CATALOG.update({
+ 'Text': 'Texto', 'Blur': 'Desfoque', 'Balloon': 'Balão', 'Numbers': 'Números',
+ 'Drop an image here': 'Arraste uma imagem aqui',
+ 'Capture, open or paste an image to start editing.': 'Capture, abra ou cole uma imagem para começar a editar.',
+ 'Capture screen': 'Capturar tela', 'Open image': 'Abrir imagem', 'Images': 'Imagens',
+ 'Color': 'Cor', 'Style': 'Estilo', 'Outline': 'Contorno', 'Mode': 'Modo',
+ 'Select an object to edit its properties.': 'Selecione um objeto para editar suas propriedades.',
+ 'Image': 'Imagem',
+})
+CATALOG.update({
+ 'Updated dark interface following the ScreenDepresso visual identity guide, with consistent colors, typography and icons.': 'Interface escura renovada seguindo o guia de identidade visual do ScreenDepresso, com cores, tipografia e ícones consistentes.',
+ 'Labeled tools and a contextual properties bar preserve existing annotation controls, shortcuts and continuous drawing.': 'Ferramentas com rótulos e barra contextual de propriedades preservam os controles de anotação, atalhos e desenho contínuo.',
+ 'The empty editor offers capture, open, paste and image dropping. Compact windows use smaller toolbars and scrollable properties.': 'O editor vazio oferece captura, abertura, colagem e arraste de imagens. Janelas compactas usam barras menores e propriedades com rolagem.',
+ 'Version 0.7.0 remains available as a separate download if you prefer the previous design. Reinstall it manually to roll back.': 'A versão 0.7.0 continua disponível em um download separado para quem prefere o design anterior. Reinstale-a manualmente para voltar.',
+})
 REVERSE = {}
 for english, translated in CATALOG.items():
     REVERSE.setdefault(translated, english)
@@ -242,6 +258,15 @@ _translator = None
 def tr(source):
     english = REVERSE.get(source, source)
     return CATALOG.get(english, english) if _language == 'pt_BR' else english
+
+
+def native_help(source):
+    text = tr(source)
+    if sys.platform == 'darwin':
+        for portable in ('Ctrl+Enter', 'Ctrl+D', 'Ctrl+V'):
+            native = QKeySequence(portable.replace('Enter', 'Return')).toString(QKeySequence.SequenceFormat.NativeText)
+            text = text.replace(portable, native)
+    return text
 
 
 def mode_label(mode):
@@ -278,10 +303,17 @@ def translate_tree(root):
     for widget in [root] + root.findChildren(QAction) + root.findChildren(QLabel) + root.findChildren(QAbstractButton):
         if hasattr(widget, 'text') and hasattr(widget, 'setText'):
             widget.setText(tr(widget.text()))
+        if isinstance(widget, QAction) and widget.property('toolLabel'):
+            widget.setIconText(tr(widget.property('toolLabel')))
     for widget in [root] + root.findChildren(QWidget) + root.findChildren(QAction):
         shortcut = widget.property('hoverShortcut')
-        if shortcut is not None:
-            widget.setToolTip(widget.text() + (f' ({shortcut})' if shortcut else ''))
+        help_source = widget.property('helpSource')
+        if help_source:
+            widget.setToolTip(native_help(help_source))
+            if isinstance(widget, QLabel):
+                widget.setText(native_help(help_source))
+        elif shortcut is not None:
+            widget.setToolTip(widget.text() + (f' ({QKeySequence(shortcut).toString(QKeySequence.SequenceFormat.NativeText)})' if shortcut else ''))
         else:
             widget.setToolTip(tr(widget.toolTip()))
     for widget in [root] + root.findChildren(QDockWidget) + root.findChildren(QToolBar):
@@ -308,6 +340,10 @@ def translate_tree(root):
             widget.retranslate()
         elif widget.objectName() == 'updatesPanel':
             widget.render()
+        elif widget.objectName() == 'contextBar':
+            widget.refresh()
+        elif widget.objectName() == 'emptyState':
+            widget.retranslate()
 
 
 def set_language(language):
