@@ -17,7 +17,7 @@ QToolButton:disabled { color: #737b8b; }
 QScrollArea, QScrollArea > QWidget > QWidget { background: #171a20; border: 0; }
 QDockWidget { color: #e5e7eb; }
 QDockWidget::title { background: #30343d; padding: 8px; }
-QListWidget, QLineEdit, QKeySequenceEdit, QSpinBox, QComboBox { background: #1c2028; color: #e5e7eb; border: 1px solid #475163; border-radius: 4px; padding: 6px; }
+QListWidget, QLineEdit, QKeySequenceEdit, QSpinBox, QComboBox, QTextBrowser { background: #1c2028; color: #e5e7eb; border: 1px solid #475163; border-radius: 4px; padding: 6px; }
 QListWidget::item { padding: 10px; }
 QListWidget::item:selected { background: #36577d; }
 QPushButton { background: #3b4351; border: 1px solid #566277; border-radius: 5px; padding: 8px 12px; }
