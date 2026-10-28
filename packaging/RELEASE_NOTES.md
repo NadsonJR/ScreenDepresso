@@ -1,3 +1,12 @@
+## Novidades da versão 0.6.3
+
+- Espessura da borda de retângulos ajustável de 1 a 40 px no menu do botão lateral.
+- Opção de cantos arredondados, com raio de 1 a 100 px; desmarque para voltar aos cantos retos.
+- Seis modelos de marcador numerado: círculo clássico, círculo sólido, quadrado, losango, círculo com contorno e hexágono.
+- Modelos no menu do próprio botão de marcadores, preservando a numeração sequencial, a cor global e o controle independente da ponta.
+- Alterações de espessura, cantos e modelos aplicáveis a objetos existentes, com prévia durante o desenho e desfazer/refazer.
+- Preferências de desenho e controles preservados por aba.
+
 ## Novidades da versão 0.6.2
 
 - Zoom pelo scroll do mouse, mantendo o ponto sob o cursor; Shift+scroll mantém a rolagem da imagem.

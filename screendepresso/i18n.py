@@ -151,6 +151,14 @@ CATALOG.update({
  'Restart now? Unsaved edits will be lost.': 'Reiniciar agora? Edições não salvas serão perdidas.',
  'Could not restart the application. Try again.': 'Não foi possível reiniciar o aplicativo. Tente novamente.',
 })
+CATALOG.update({
+ 'Border thickness': 'Espessura da borda',
+ 'Rounded corners': 'Cantos arredondados', 'Corner radius': 'Raio dos cantos',
+ 'Classic circle': 'Círculo clássico', 'Flat circle': 'Círculo sólido',
+ 'Square marker': 'Marcador quadrado', 'Diamond marker': 'Marcador em losango',
+ 'Outlined circle': 'Círculo com contorno', 'Hexagon marker': 'Marcador hexagonal',
+ 'Numbers • Click for the next number; drag from the marker to its target': 'Números • Clique para o próximo número; arraste do marcador até o alvo',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None

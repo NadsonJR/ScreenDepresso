@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.6.2)
+## Instalador e atualizações (v0.6.3)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.6.2_amd64.deb
+sudo apt install ./screendepresso_0.6.3_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Updates… → Check for updates → Download and install**. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições, feche e reabra o aplicativo após atualizar. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.2` e `git push origin v0.6.2`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.6.3` e `git push origin v0.6.3`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.6.2_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.6.3_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -204,3 +204,11 @@ Menus, dicas e controles estão disponíveis em inglês e português BR.
 - **Shared blur layer** é o padrão: a imagem é desfocada uma única vez, preservando a união de todas as áreas selecionadas; anotações ficam por cima e a intensidade vale para toda a camada. Para restaurar o comportamento anterior, escolha **Sequential blur (legacy)** no menu do desfoque. Esse modo aplica cada efeito em sequência, com intensidades individuais. A escolha é independente por aba, não exclui os objetos e pode ser desfeita. Os dois renderizadores ficam separados em `screendepresso/blur.py`.
 - **Settings → Updates → Check for updates** consulta automaticamente ao abrir o popup, sem botão de consulta dentro dele. Se houver nova versão, aparece **Download and install**; durante o download, uma barra mostra o progresso em bytes. Tamanho, origem e SHA-256 continuam sendo verificados.
 - Ao concluir, **Restart application** permite escolher quando reiniciar. No Ubuntu, o pacote é instalado mediante autorização do sistema antes de oferecer o reinício. No Windows, o download verificado fica pronto e o botão inicia a instalação e reabre o aplicativo. Salve as edições antes de reiniciar. A proteção de instância única aguarda o encerramento do processo anterior.
+
+## Retângulos e modelos de marcadores (0.6.3)
+
+Abra o menu do botão **Rectangle** para escolher a cor, a **Border thickness** (1–40 px), ativar **Rounded corners** e ajustar o **Corner radius** (1–100 px). Desative a opção para desenhar cantos retos. Em retângulos pequenos, espessura e raio são limitados pelo tamanho da forma para evitar bordas cortadas. Os controles modificam o retângulo selecionado e definem o padrão dos próximos desenhos na mesma aba.
+
+O menu de **Numbered markers** oferece seis modelos: **Classic circle**, **Flat circle**, **Square marker**, **Diamond marker**, **Outlined circle** e **Hexagon marker**. É possível misturar modelos na mesma imagem, mantendo uma única sequência de números. Escolher um modelo altera o marcador selecionado e o padrão dos próximos; a cor continua sendo comum a todos os marcadores da imagem. Centro, linha e ponta mantêm os controles de movimento existentes.
+
+Todas as opções aparecem na prévia durante o desenho, funcionam com zoom e podem ser desfeitas/refeitas. Os menus acompanham o idioma escolhido nas configurações.

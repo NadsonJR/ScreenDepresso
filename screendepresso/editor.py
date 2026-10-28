@@ -2,11 +2,12 @@ from .i18n import tr
 """Retained annotations with undo/redo and non-destructive previews."""
 import copy
 import math
-from PySide6.QtCore import Qt, QPoint, QPointF, QRect, QSize, QSignalBlocker, Signal
+from PySide6.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QSize, QSignalBlocker, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont, QFontMetrics, QLinearGradient
 from PySide6.QtWidgets import QWidget, QPlainTextEdit, QApplication
 from .annotations import ARROW_STYLES, BUBBLE_STYLES, bubble_path, draw_arrow, text_document, text_font
 from .blur import shared_blur, sequential_blur
+from .markers import MARKER_STYLES, marker_path, marker_body_hit
 
 class InlineTextEdit(QPlainTextEdit):
 
@@ -36,6 +37,8 @@ class Canvas(QWidget):
     zoom_changed = Signal(int)
     arrow_style_changed = Signal()
     blur_settings_changed = Signal()
+    rectangle_format_changed = Signal()
+    marker_style_changed = Signal()
 
     def __init__(self):
         super().__init__()
@@ -55,6 +58,8 @@ class Canvas(QWidget):
         self.zoom = 1.0
         self.arrow_style = 'classic'
         self.blur_mode = 'shared'
+        self.rectangle_format = {'width': 4, 'rounded': False, 'radius': 12}
+        self.marker_style = 'circle'
         self.begin = self.end = None
         self.pending = None
         self.action = None
@@ -75,6 +80,9 @@ class Canvas(QWidget):
             self.arrow_color_changed.emit(self.arrow_color)
         if value == 'retângulo':
             self.rectangle_color_changed.emit(self.rectangle_color)
+            self.rectangle_format_changed.emit()
+        if value == 'numero':
+            self.marker_style_changed.emit()
         self.setCursor(Qt.CursorShape.OpenHandCursor if value == 'selecionar' else Qt.CursorShape.CrossCursor)
 
     @property
@@ -98,11 +106,11 @@ class Canvas(QWidget):
         return {key: QImage(value) if isinstance(value, QImage) else copy.deepcopy(value) for key, value in obj.items()}
 
     def snapshot(self):
-        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format.copy(), self.text_format.copy(), self.arrow_style, self.blur_mode, self.blur_radius)
+        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format.copy(), self.text_format.copy(), self.arrow_style, self.blur_mode, self.blur_radius, self.rectangle_format.copy(), self.marker_style)
 
     def restore(self, state):
         self.finish_text(False)
-        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format, self.text_format, self.arrow_style, self.blur_mode, self.blur_radius = state
+        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format, self.text_format, self.arrow_style, self.blur_mode, self.blur_radius, self.rectangle_format, self.marker_style = state
         self.selected = None
         self.arrow_color_changed.emit(self.arrow_color)
         self.rectangle_color_changed.emit(self.rectangle_color)
@@ -111,6 +119,8 @@ class Canvas(QWidget):
         self.text_format_changed.emit()
         self.arrow_style_changed.emit()
         self.blur_settings_changed.emit()
+        self.rectangle_format_changed.emit()
+        self.marker_style_changed.emit()
         self.pending = self.before = self.begin = self.end = None
         self.sync_size()
         self.update()
@@ -143,7 +153,7 @@ class Canvas(QWidget):
     @staticmethod
     def object_rect(obj):
         rect = QRect(QPoint(*obj['a']), QPoint(*obj['b'])).normalized()
-        return rect.adjusted(-22, -22, 22, 22) if obj['kind'] == 'numero' else rect
+        return rect.adjusted(-26, -26, 26, 26) if obj['kind'] == 'numero' else rect
 
     @staticmethod
     def hit_test(obj, point):
@@ -153,7 +163,7 @@ class Canvas(QWidget):
             return Canvas.object_rect(obj).adjusted(-6, -6, 6, 6).contains(point)
         a, b = QPointF(*obj['a']), QPointF(*obj['b'])
         px, py = point.x(), point.y()
-        if math.hypot(px-a.x(), py-a.y()) <= 24:
+        if marker_body_hit(obj, point):
             return True
         dx, dy = b.x()-a.x(), b.y()-a.y()
         length = dx*dx + dy*dy
@@ -233,6 +243,34 @@ class Canvas(QWidget):
         self.marker_color = color.name()
         self.marker_color_changed.emit(self.marker_color)
         self.commit(before)
+
+    def set_rectangle_format(self, **values):
+        self.finish_text()
+        if 'width' in values:
+            values['width'] = max(1, min(40, int(values['width'])))
+        if 'radius' in values:
+            values['radius'] = max(1, min(100, int(values['radius'])))
+        if 'rounded' in values:
+            values['rounded'] = bool(values['rounded'])
+        before = self.snapshot()
+        self.rectangle_format.update(values)
+        if self.selected is not None and self.objects[self.selected]['kind'] == 'retângulo':
+            self.objects[self.selected].update(values)
+        if self.snapshot() != before:
+            self.rectangle_format_changed.emit()
+            self.commit(before)
+
+    def set_marker_style(self, style):
+        self.finish_text()
+        if style not in MARKER_STYLES:
+            return
+        before = self.snapshot()
+        self.marker_style = style
+        if self.selected is not None and self.objects[self.selected]['kind'] == 'numero':
+            self.objects[self.selected]['style'] = style
+        if self.snapshot() != before:
+            self.marker_style_changed.emit()
+            self.commit(before)
 
     def set_bubble_format(self, **values):
         self.finish_text()
@@ -349,26 +387,30 @@ class Canvas(QWidget):
         painter.setBrush(color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(target, 5, 5)
-        painter.setBrush(QColor(0, 0, 0, 45))
-        painter.drawEllipse(center+QPointF(1, 2), 21, 21)
-        gradient = QLinearGradient(center.x(), center.y()-20, center.x(), center.y()+20)
-        gradient.setColorAt(0, color.lighter(120))
-        gradient.setColorAt(1, color.darker(110))
-        painter.setBrush(gradient)
-        painter.setPen(QPen(color.darker(120), 1))
-        painter.drawEllipse(center, 20, 20)
+        style = obj.get('style', 'circle')
+        if style == 'circle':
+            painter.setBrush(QColor(0, 0, 0, 45))
+            painter.drawEllipse(center+QPointF(1, 2), 21, 21)
+            gradient = QLinearGradient(center.x(), center.y()-20, center.x(), center.y()+20)
+            gradient.setColorAt(0, color.lighter(120))
+            gradient.setColorAt(1, color.darker(110))
+            painter.setBrush(gradient)
+        else:
+            painter.setBrush(QColor('white') if style == 'outline' else color)
+        painter.setPen(QPen(color if style == 'outline' else color.darker(120), 3 if style == 'outline' else 1))
+        painter.drawPath(marker_path(style, center))
         font = QFont()
         font.setBold(True)
         size = 23
         number = str(obj['number'])
         while size > 6:
             font.setPixelSize(size)
-            if QFontMetrics(font).horizontalAdvance(number) <= 30:
+            if QFontMetrics(font).horizontalAdvance(number) <= (26 if style == 'diamond' else 30):
                 break
             size -= 1
         painter.setFont(font)
         luminance = (299*color.red()+587*color.green()+114*color.blue())/1000
-        painter.setPen(QColor('#111827') if luminance > 155 else QColor('white'))
+        painter.setPen(color if style == 'outline' else QColor('#111827') if luminance > 155 else QColor('white'))
         painter.drawText(QRect(round(center.x())-19, round(center.y())-20, 39, 40), Qt.AlignmentFlag.AlignCenter, number)
 
     def draw_object(self, image, obj):
@@ -390,8 +432,15 @@ class Canvas(QWidget):
         elif obj['kind'] == 'seta':
             draw_arrow(p, obj)
         elif obj['kind'] == 'retângulo':
-            p.setPen(QPen(QColor(obj.get('color', '#ef233c')), 4))
-            p.drawRect(rect.adjusted(2, 2, -2, -2))
+            width = min(obj.get('width', 4), max(1, min(rect.width()-1, rect.height()-1)))
+            p.setPen(QPen(QColor(obj.get('color', '#ef233c')), width, Qt.PenStyle.SolidLine,
+                          Qt.PenCapStyle.SquareCap, Qt.PenJoinStyle.MiterJoin))
+            shape = QRectF(QPointF(rect.topLeft()), QPointF(rect.bottomRight())).adjusted(width/2, width/2, -width/2, -width/2)
+            if obj.get('rounded', False):
+                radius = min(obj.get('radius', 12), max(0, shape.width()/2), max(0, shape.height()/2))
+                p.drawRoundedRect(shape, radius, radius)
+            else:
+                p.drawRect(shape)
         elif obj['kind'] == 'texto':
             p.translate(rect.topLeft())
             text_document(obj, rect.width()).drawContents(p)
@@ -427,7 +476,7 @@ class Canvas(QWidget):
             obj = self.objects[self.selected]
             if obj['kind'] == 'numero':
                 p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawEllipse(QPointF(*obj['a']), 23, 23)
+                p.drawPath(marker_path(obj.get('style', 'circle'), QPointF(*obj['a']), 23))
             else:
                 p.drawRect(self.object_rect(obj))
             p.setBrush(QColor('white'))
@@ -444,7 +493,7 @@ class Canvas(QWidget):
         self.before = self.snapshot()
         self.action = None
         selected_marker = self.objects[self.selected] if self.selected is not None else None
-        adjust_marker = self.tool == 'numero' and selected_marker is not None and selected_marker['kind'] == 'numero' and (math.hypot(point.x()-selected_marker['a'][0], point.y()-selected_marker['a'][1]) <= 24 or (point-QPoint(*selected_marker['b'])).manhattanLength() <= 12)
+        adjust_marker = self.tool == 'numero' and selected_marker is not None and selected_marker['kind'] == 'numero' and (marker_body_hit(selected_marker, point) or (point-QPoint(*selected_marker['b'])).manhattanLength() <= 12)
         if self.tool == 'selecionar' or adjust_marker:
             if self.selected is not None:
                 obj = self.objects[self.selected]
@@ -455,12 +504,15 @@ class Canvas(QWidget):
             self.selected = next((i for i in reversed(range(len(self.objects))) if self.hit_test(self.objects[i], point)), None)
             if self.selected is not None:
                 obj = self.objects[self.selected]
-                self.action = 'marker_center' if obj['kind'] == 'numero' and math.hypot(point.x()-obj['a'][0], point.y()-obj['a'][1]) <= 24 else 'move'
+                self.action = 'marker_center' if obj['kind'] == 'numero' and marker_body_hit(obj, point) else 'move'
                 if obj['kind'] == 'seta':
                     self.arrow_color_changed.emit(obj.get('color', '#ef233c'))
                     self.arrow_style_changed.emit()
                 if obj['kind'] == 'retângulo':
                     self.rectangle_color_changed.emit(obj.get('color', '#ef233c'))
+                    self.rectangle_format_changed.emit()
+                if obj['kind'] == 'numero':
+                    self.marker_style_changed.emit()
                 if obj['kind'] == 'balao':
                     self.bubble_changed.emit()
                 if obj['kind'] == 'texto':
@@ -476,8 +528,10 @@ class Canvas(QWidget):
             self.pending['style'] = self.arrow_style
         if self.tool == 'retângulo':
             self.pending['color'] = self.rectangle_color
+            self.pending.update(self.rectangle_format)
         if self.tool == 'numero':
             self.pending['number'] = 1 + sum(obj['kind'] == 'numero' for obj in self.objects)
+            self.pending['style'] = self.marker_style
         if self.tool == 'balao':
             self.pending.update(self.bubble_format)
             self.pending['tail'] = [point.x(), point.y()]

@@ -5,11 +5,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize, QByteArray, QBuffer, QIODevice
 from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap, QFont
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .documents import CaptureTabs
 from .annotations import ARROW_STYLES, BUBBLE_STYLES
+from .markers import MARKER_STYLES
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
 from .platform_support import capture_desktop, data_directory, global_hotkeys_available
@@ -187,6 +188,8 @@ class MainWindow(QMainWindow):
         self.setup_bubble_menu(tools)
         self.setup_text_menu(tools)
         self.setup_arrow_menu(tools)
+        self.setup_rectangle_menu(tools)
+        self.setup_marker_menu(tools)
         self.display_marker_color(self.canvas.marker_color)
         self.display_rectangle_color(self.canvas.rectangle_color)
         self.display_arrow_color(self.canvas.arrow_color)
@@ -364,6 +367,8 @@ class MainWindow(QMainWindow):
                 (canvas.zoom_changed, self.display_zoom),
                 (canvas.arrow_style_changed, self.display_arrow_style),
                 (canvas.blur_settings_changed, self.display_blur_options),
+                (canvas.rectangle_format_changed, self.display_rectangle_format),
+                (canvas.marker_style_changed, self.display_marker_style),
             ]:
                 signal.connect(lambda *args, c=canvas, f=callback: f(*args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
             canvas.setProperty('windowSignalsConnected', True)
@@ -379,6 +384,8 @@ class MainWindow(QMainWindow):
         self.display_zoom(round(canvas.zoom*100))
         self.display_arrow_style()
         self.display_blur_options()
+        self.display_rectangle_format()
+        self.display_marker_style()
         self.update_dimensions()
         self.tabs.retranslate()
 
@@ -490,6 +497,78 @@ class MainWindow(QMainWindow):
             action.setToolTip(tr(label))
         button.setMenu(self.bubble_menu)
         button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+
+    def setup_rectangle_menu(self, tools):
+        menu = tools.widgetForAction(self.tool_actions['retângulo']).menu()
+        menu.addSeparator()
+        panel = QWidget()
+        form = QFormLayout(panel)
+        self.rectangle_width = QSpinBox()
+        self.rectangle_width.setRange(1, 40)
+        self.rectangle_width.setSuffix(' px')
+        self.rectangle_width.setMinimumWidth(110)
+        self.rectangle_width.setKeyboardTracking(False)
+        self.rectangle_width.setToolTip(tr('Border thickness'))
+        self.rectangle_width.valueChanged.connect(lambda width: self.canvas.set_rectangle_format(width=width))
+        form.addRow(tr('Border thickness'), self.rectangle_width)
+        self.rectangle_rounded = QCheckBox(tr('Rounded corners'))
+        self.rectangle_rounded.setToolTip(tr('Rounded corners'))
+        self.rectangle_rounded.toggled.connect(lambda rounded: self.canvas.set_rectangle_format(rounded=rounded))
+        form.addRow(self.rectangle_rounded)
+        self.rectangle_radius = QSpinBox()
+        self.rectangle_radius.setRange(1, 100)
+        self.rectangle_radius.setSuffix(' px')
+        self.rectangle_radius.setKeyboardTracking(False)
+        self.rectangle_radius.setToolTip(tr('Corner radius'))
+        self.rectangle_radius.valueChanged.connect(lambda radius: self.canvas.set_rectangle_format(radius=radius))
+        form.addRow(tr('Corner radius'), self.rectangle_radius)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(panel)
+        menu.addAction(action)
+
+    def display_rectangle_format(self):
+        canvas = self.canvas
+        obj = canvas.objects[canvas.selected] if canvas.selected is not None else None
+        values = obj if obj is not None and obj['kind'] == 'retângulo' else canvas.rectangle_format
+        for widget, value in [(self.rectangle_width, values.get('width', 4)),
+                              (self.rectangle_rounded, values.get('rounded', False)),
+                              (self.rectangle_radius, values.get('radius', 12))]:
+            widget.blockSignals(True)
+            if widget is self.rectangle_rounded:
+                widget.setChecked(value)
+            else:
+                widget.setValue(value)
+            widget.blockSignals(False)
+        self.rectangle_radius.setEnabled(values.get('rounded', False))
+        self.display_rectangle_color(values.get('color', canvas.rectangle_color))
+
+    def setup_marker_menu(self, tools):
+        menu = tools.widgetForAction(self.tool_actions['numero']).menu()
+        menu.addSeparator()
+        self.marker_styles = {}
+        group = QActionGroup(menu)
+        group.setExclusive(True)
+        for style, label in MARKER_STYLES.items():
+            action = menu.addAction(toolbar_icon('marker:'+style), tr(label))
+            action.setCheckable(True)
+            action.setToolTip(tr(label))
+            action.triggered.connect(lambda checked=False, s=style: self.choose_marker_style(s))
+            group.addAction(action)
+            self.marker_styles[style] = action
+
+    def choose_marker_style(self, style):
+        self.canvas.set_marker_style(style)
+        if self.canvas.selected is None or self.canvas.objects[self.canvas.selected]['kind'] != 'numero':
+            self.choose_tool('numero')
+
+    def current_marker_style(self):
+        canvas = self.canvas
+        obj = canvas.objects[canvas.selected] if canvas.selected is not None else None
+        return obj.get('style', 'circle') if obj is not None and obj['kind'] == 'numero' else canvas.marker_style
+
+    def display_marker_style(self):
+        self.marker_styles[self.current_marker_style()].setChecked(True)
+        self.display_marker_color(self.canvas.marker_color)
 
     def current_bubble_format(self):
         canvas = self.canvas
@@ -605,7 +684,7 @@ class MainWindow(QMainWindow):
             for action in self.tool_actions.values():
                 action.setChecked(False)
             self.tool_group.setExclusive(True)
-        hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp'), 'numero': tr('Numbers • Click for the next number; drag from the circle to its target'), 'balao': tr('Balloon • Drag to draw; move the tail handle to point at an object')}
+        hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp'), 'numero': tr('Numbers • Click for the next number; drag from the marker to its target'), 'balao': tr('Balloon • Drag to draw; move the tail handle to point at an object')}
         self.tool_hint.setText(hints[name])
         self.tool_hint.setToolTip(hints[name])
 
@@ -631,7 +710,10 @@ class MainWindow(QMainWindow):
             self.canvas.set_rectangle_color(color)
 
     def display_rectangle_color(self, color):
-        icon = toolbar_icon('rectangle', color)
+        canvas = self.canvas
+        obj = canvas.objects[canvas.selected] if canvas.selected is not None else None
+        values = obj if obj is not None and obj['kind'] == 'retângulo' else canvas.rectangle_format
+        icon = toolbar_icon('rectangle:rounded' if values.get('rounded', False) else 'rectangle', color)
         self.tool_actions['retângulo'].setIcon(icon)
         self.color_actions['retângulo'].setIcon(icon)
 
@@ -641,7 +723,7 @@ class MainWindow(QMainWindow):
             self.canvas.set_marker_color(color)
 
     def display_marker_color(self, color):
-        icon = toolbar_icon('1', color)
+        icon = toolbar_icon('marker:'+self.current_marker_style(), color)
         self.tool_actions['numero'].setIcon(icon)
         self.color_actions['numero'].setIcon(icon)
 
@@ -836,10 +918,12 @@ def run_application(app, instance):
         canvas.objects.append({'kind': 'balao', 'a': [5, 5], 'b': [110, 55], 'tail': [15, 75], **canvas.bubble_format})
         canvas.objects.extend([{'kind': 'desfoque', 'a': [x, 1], 'b': [x+20, 20], 'radius': 14} for x in (1, 80)])
         canvas.objects.append({'kind': 'seta', 'a': [20, 70], 'b': [110, 70], 'color': '#ef233c', 'style': 'line'})
+        canvas.objects.append({'kind': 'retângulo', 'a': [2, 2], 'b': [118, 78], 'color': '#2563eb', 'width': 6, 'rounded': True, 'radius': 12})
+        canvas.objects.append({'kind': 'numero', 'a': [95, 65], 'b': [110, 75], 'number': 1, 'style': 'hexagon'})
         canvas.start_text({'kind': 'texto', 'a': [15, 10], 'b': [105, 50], 'text': 'Smoke', **canvas.text_format})
         canvas.finish_text()
         rendered = canvas.image
-        if rendered == second or len(canvas.objects) != 5 or rendered.pixelColor(60, 70) != QColor('#ef233c'):
+        if rendered == second or len(canvas.objects) != 7 or rendered.pixelColor(60, 70) != QColor('#ef233c'):
             raise RuntimeError('Balloon and text smoke test failed')
         window.zoom_slider.setValue(150)
         if canvas.zoom != 1.5 or canvas.image != rendered:

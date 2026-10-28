@@ -1,5 +1,5 @@
 """Dark desktop palette and original toolbar icons."""
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QFont, QPalette, QPainterPath
 
 STYLE = '''
@@ -130,9 +130,21 @@ def icon(symbol, color='#3878a8'):
         hand.quadTo(19, 40, 18, 37)
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawPath(hand)
-    elif symbol == 'rectangle':
+    elif symbol.startswith('marker:'):
+        from .markers import marker_path
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRect(12, 15, 24, 18)
+        p.drawPath(marker_path(symbol.split(':')[1], QPointF(24, 24), 16))
+        font = QFont()
+        font.setPixelSize(19)
+        font.setBold(True)
+        p.setFont(font)
+        p.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, '1')
+    elif symbol == 'rectangle' or symbol == 'rectangle:rounded':
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        if symbol.endswith(':rounded'):
+            p.drawRoundedRect(QRectF(12, 15, 24, 18), 5, 5)
+        else:
+            p.drawRect(12, 15, 24, 18)
     elif symbol == 'arrow' or symbol.startswith('arrow:'):
         from .annotations import draw_arrow
         draw_arrow(p, {'a': [13, 35], 'b': [35, 13], 'style': symbol.split(':')[1] if ':' in symbol else 'classic', 'color': '#f8fafc'}, head_length=11)
