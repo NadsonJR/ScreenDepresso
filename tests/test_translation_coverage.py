@@ -18,7 +18,7 @@ def test_all_literal_application_translations_and_model_labels_have_portuguese_e
     missing=[]
     for path in (Path(__file__).parents[1]/'screendepresso').glob('*.py'):
         if path.name=='i18n.py':continue
-        for node in ast.walk(ast.parse(path.read_text())):
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
             if (isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id=='tr'
                 and node.args and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str)
                 and node.args[0].value not in i18n.CATALOG):

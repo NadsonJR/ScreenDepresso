@@ -1,5 +1,6 @@
 from .i18n import tr, mode_label
 import json
+import locale
 import os
 import re
 import tempfile
@@ -34,7 +35,13 @@ class Settings:
         self.language = 'en'
         self.workspace_limit = 25
         try:
-            data = json.loads(self.path.read_text())
+            try:
+                content = self.path.read_text(encoding='utf-8')
+            except UnicodeDecodeError:
+                # Preserve settings written by older Windows versions using
+                # the local ANSI code page; all new writes use UTF-8.
+                content = self.path.read_text(encoding=locale.getpreferredencoding(False))
+            data = json.loads(content)
             shortcuts = data['hotkeys']
             if set(shortcuts) != set(DEFAULT_HOTKEYS) or len({parse_hotkey(v) for v in shortcuts.values()}) != 3:
                 raise ValueError(tr('Invalid hotkeys'))
@@ -57,7 +64,7 @@ class Settings:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(dir=self.path.parent)
         try:
-            with os.fdopen(fd, 'w') as stream:
+            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
                 json.dump({'directory': directory, 'hotkeys': hotkeys, 'language': language, 'workspace_limit': workspace_limit}, stream, ensure_ascii=False)
             os.replace(temporary, self.path)
         finally:

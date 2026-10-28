@@ -184,7 +184,7 @@ def test_dragged_thumbnail_is_copy_only_and_adds_editable_layer_at_zoom(window):
     window.refresh()
     item=select_path(window,path)
     mime=window.list.mimeData([item])
-    assert mime.urls()[0].toLocalFile()==str(path)
+    assert Path(mime.urls()[0].toLocalFile())==path
     window.zoom_slider.setValue(200)
     event=QDropEvent(QPointF(100,80),Qt.DropAction.CopyAction,mime,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier)
     window.canvas.dropEvent(event)
@@ -253,3 +253,18 @@ assert not path.exists()
 '''
     result=subprocess.run([sys.executable,'-c',script,str(path)],env=env,capture_output=True,text=True,timeout=15)
     assert result.returncode==0, result.stdout+result.stderr
+
+
+def test_settings_utf8_and_legacy_windows_encoding_preserve_directory(tmp_path,monkeypatch):
+    import json
+    from screendepresso import settings as settings_module
+    settings=Settings(tmp_path/'settings.json')
+    folder=str(tmp_path/'capturas-á-日本')
+    settings.save(folder,DEFAULT_HOTKEYS,'pt_BR',75)
+    assert json.loads(settings.path.read_text(encoding='utf-8'))['directory']==folder
+    assert Settings(settings.path).directory==folder
+    legacy=str(tmp_path/'capturas-á')
+    settings.path.write_bytes(json.dumps({'directory':legacy,'hotkeys':DEFAULT_HOTKEYS,'language':'pt_BR'},ensure_ascii=False).encode('cp1252'))
+    monkeypatch.setattr(settings_module.locale,'getpreferredencoding',lambda *args:'cp1252')
+    assert Settings(settings.path).directory==legacy
+    assert Settings(settings.path).workspace_limit==25
