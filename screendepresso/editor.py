@@ -3,9 +3,10 @@ from .i18n import tr
 import copy
 import math
 from PIL import Image, ImageFilter
-from PySide6.QtCore import Qt, QPoint, QPointF, QRect, Signal
+from PySide6.QtCore import Qt, QPoint, QPointF, QRect, QSize, QSignalBlocker, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont, QFontMetrics, QLinearGradient
 from PySide6.QtWidgets import QWidget, QPlainTextEdit, QApplication
+from .annotations import BUBBLE_STYLES, bubble_path, text_document, text_font
 
 class InlineTextEdit(QPlainTextEdit):
 
@@ -30,6 +31,9 @@ class Canvas(QWidget):
     marker_color_changed = Signal(str)
     rectangle_color_changed = Signal(str)
     arrow_color_changed = Signal(str)
+    bubble_changed = Signal()
+    text_format_changed = Signal()
+    zoom_changed = Signal(int)
 
     def __init__(self):
         super().__init__()
@@ -44,6 +48,9 @@ class Canvas(QWidget):
         self.marker_color = '#ef233c'
         self.rectangle_color = '#ef233c'
         self.arrow_color = '#ef233c'
+        self.bubble_format = {'style': 'oval', 'fill': '#ffffff', 'outline': '#111827'}
+        self.text_format = {'font_family': QFont().family(), 'font_size': 24, 'color': '#ef233c'}
+        self.zoom = 1.0
         self.begin = self.end = None
         self.pending = None
         self.action = None
@@ -79,7 +86,7 @@ class Canvas(QWidget):
         self.begin = self.end = self.pending = self.before = None
         self.undo_stack.clear()
         self.redo_stack.clear()
-        self.setFixedSize(self.base.size())
+        self.sync_size()
         self.update()
 
     @staticmethod
@@ -87,17 +94,19 @@ class Canvas(QWidget):
         return {key: QImage(value) if isinstance(value, QImage) else copy.deepcopy(value) for key, value in obj.items()}
 
     def snapshot(self):
-        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color)
+        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format.copy(), self.text_format.copy())
 
     def restore(self, state):
         self.finish_text(False)
-        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color = state
+        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format, self.text_format = state
+        self.selected = None
         self.arrow_color_changed.emit(self.arrow_color)
         self.rectangle_color_changed.emit(self.rectangle_color)
         self.marker_color_changed.emit(self.marker_color)
-        self.selected = None
+        self.bubble_changed.emit()
+        self.text_format_changed.emit()
         self.pending = self.before = self.begin = self.end = None
-        self.setFixedSize(self.base.size())
+        self.sync_size()
         self.update()
         self.changed.emit()
 
@@ -132,6 +141,8 @@ class Canvas(QWidget):
 
     @staticmethod
     def hit_test(obj, point):
+        if obj['kind'] == 'balao':
+            return bubble_path(Canvas.object_rect(obj), obj).contains(QPointF(point)) or (point-QPoint(*obj['tail'])).manhattanLength() <= 12
         if obj['kind'] != 'numero':
             return Canvas.object_rect(obj).adjusted(-6, -6, 6, 6).contains(point)
         a, b = QPointF(*obj['a']), QPointF(*obj['b'])
@@ -192,6 +203,113 @@ class Canvas(QWidget):
         self.marker_color_changed.emit(self.marker_color)
         self.commit(before)
 
+    def set_bubble_format(self, **values):
+        self.finish_text()
+        if 'style' in values and values['style'] not in BUBBLE_STYLES:
+            return
+        for name in ('fill', 'outline'):
+            if name in values:
+                color = QColor(values[name])
+                if not color.isValid():
+                    return
+                values[name] = color.name()
+        before = self.snapshot()
+        self.bubble_format.update(values)
+        if self.selected is not None and self.objects[self.selected]['kind'] == 'balao':
+            self.objects[self.selected].update(values)
+        if self.snapshot() != before:
+            self.bubble_changed.emit()
+            self.commit(before)
+
+    def current_text_format(self):
+        if self.text_editor is not None:
+            return self.text_object
+        if self.selected is not None and self.objects[self.selected]['kind'] == 'texto':
+            return self.objects[self.selected]
+        return self.text_format
+
+    def set_text_format(self, **values):
+        if 'font_size' in values:
+            values['font_size'] = max(6, min(200, int(values['font_size'])))
+        if 'color' in values:
+            color = QColor(values['color'])
+            if not color.isValid():
+                return
+            values['color'] = color.name()
+        before = self.snapshot()
+        self.text_format.update(values)
+        if self.text_editor is not None:
+            self.text_object.update(values)
+            self.refresh_text_editor()
+        elif self.selected is not None and self.objects[self.selected]['kind'] == 'texto':
+            obj = self.objects[self.selected]
+            obj.update(values)
+            self.fit_text_object(obj)
+            self.ensure_text_space(obj)
+        self.text_format_changed.emit()
+        if self.text_editor is None and self.snapshot() != before:
+            self.commit(before)
+
+    def sync_size(self):
+        size = self.base.size()
+        if self.text_editor is not None:
+            rect = self.object_rect(self.text_object)
+            size = size.expandedTo(QSize(rect.right()+1, rect.bottom()+1))
+        self.setFixedSize(max(0, round(size.width()*self.zoom)), max(0, round(size.height()*self.zoom)))
+
+    def set_zoom(self, percent):
+        percent = max(10, min(400, int(percent)))
+        self.zoom = percent/100
+        self.sync_size()
+        if self.text_editor is not None:
+            self.refresh_text_editor()
+        self.update()
+        self.zoom_changed.emit(percent)
+
+    def image_point(self, event):
+        return QPoint(round(event.position().x()/self.zoom), round(event.position().y()/self.zoom))
+
+    def fit_text_object(self, obj):
+        rect = self.object_rect(obj)
+        metrics = QFontMetrics(text_font(obj))
+        text = obj.get('text', '')
+        natural = max((metrics.horizontalAdvance(line) for line in text.splitlines()), default=0)+8
+        glyph_width = max((metrics.horizontalAdvance(char) for char in text), default=0)+8
+        width = max(glyph_width, min(max(40, rect.width(), natural), self.base.width()))
+        height = max(rect.height(), math.ceil(text_document(obj, width).size().height())+4)
+        x = max(0, min(rect.left(), self.base.width()-width))
+        y = max(0, min(rect.top(), self.base.height()-height))
+        obj['a'], obj['b'] = [x, y], [x+width-1, y+height-1]
+
+    def ensure_text_space(self, obj):
+        rect = self.object_rect(obj)
+        width, height = max(self.base.width(), rect.right()+1), max(self.base.height(), rect.bottom()+1)
+        if width != self.base.width() or height != self.base.height():
+            expanded = QImage(width, height, QImage.Format.Format_ARGB32)
+            expanded.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(expanded)
+            painter.drawImage(0, 0, self.base)
+            painter.end()
+            self.base = expanded
+        self.sync_size()
+
+    def refresh_text_editor(self):
+        editor = self.text_editor
+        if editor is None:
+            return
+        self.text_object['text'] = editor.toPlainText()
+        self.fit_text_object(self.text_object)
+        blocker = QSignalBlocker(editor)
+        editor.setFont(text_font(self.text_object, self.zoom))
+        color = self.text_object.get('color', '#ef233c')
+        editor.setStyleSheet(f'QPlainTextEdit {{ background: rgba(24, 28, 35, 225); color: {color}; border: 1px solid #60a5fa; padding: 0px; selection-background-color: #365d8c; }}')
+        editor.setGeometry(round(self.text_object['a'][0]*self.zoom),
+                           round(self.text_object['a'][1]*self.zoom),
+                           max(1, round(self.object_rect(self.text_object).width()*self.zoom)),
+                           max(1, round(self.object_rect(self.text_object).height()*self.zoom)))
+        self.sync_size()
+        del blocker
+
     def draw_marker(self, painter, obj):
         center, target = QPointF(*obj['a']), QPointF(*obj['b'])
         color = QColor(self.marker_color)
@@ -240,6 +358,10 @@ class Canvas(QWidget):
         p.setPen(QPen(QColor('#ef233c'), 4))
         if obj['kind'] == 'numero':
             self.draw_marker(p, obj)
+        elif obj['kind'] == 'balao':
+            p.setPen(QPen(QColor(obj.get('outline', '#111827')), 3))
+            p.setBrush(QColor(obj.get('fill', '#ffffff')))
+            p.drawPath(bubble_path(rect.adjusted(2, 2, -2, -2), obj))
         elif obj['kind'] == 'imagem':
             p.drawImage(rect, obj['image'])
         elif obj['kind'] == 'seta':
@@ -253,11 +375,8 @@ class Canvas(QWidget):
             p.setPen(QPen(QColor(obj.get('color', '#ef233c')), 4))
             p.drawRect(rect.adjusted(2, 2, -2, -2))
         elif obj['kind'] == 'texto':
-            font = QFont()
-            font.setPixelSize(obj.get('font_size', 24))
-            font.setBold(True)
-            p.setFont(font)
-            p.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, obj.get('text', ''))
+            p.translate(rect.topLeft())
+            text_document(obj, rect.width()).drawContents(p)
         p.end()
 
     def render_image(self, preview=False):
@@ -273,6 +392,8 @@ class Canvas(QWidget):
 
     def paintEvent(self, event):
         p = QPainter(self)
+        p.scale(self.zoom, self.zoom)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         p.drawImage(0, 0, self.render_image(True))
         p.setPen(QPen(QColor('#2563eb'), 1, Qt.PenStyle.DashLine))
         if self.pending and self.pending['kind'] in ('recorte', 'texto'):
@@ -285,7 +406,7 @@ class Canvas(QWidget):
             else:
                 p.drawRect(self.object_rect(obj))
             p.setBrush(QColor('white'))
-            for key in (('b',) if obj['kind'] == 'numero' else ('a', 'b')):
+            for key in (('b',) if obj['kind'] == 'numero' else ('a', 'b', 'tail') if obj['kind'] == 'balao' else ('a', 'b')):
                 point = QPoint(*obj[key])
                 p.drawRect(QRect(point - QPoint(5, 5), point + QPoint(5, 5)))
 
@@ -293,7 +414,7 @@ class Canvas(QWidget):
         if event.button() != Qt.MouseButton.LeftButton or self.base.isNull():
             return
         self.finish_text()
-        point = event.position().toPoint()
+        point = self.image_point(event)
         self.begin = self.end = point
         self.before = self.snapshot()
         self.action = None
@@ -302,7 +423,7 @@ class Canvas(QWidget):
         if self.tool == 'selecionar' or adjust_marker:
             if self.selected is not None:
                 obj = self.objects[self.selected]
-                for key in (('b',) if obj['kind'] == 'numero' else ('a', 'b')):
+                for key in (('b',) if obj['kind'] == 'numero' else ('a', 'b', 'tail') if obj['kind'] == 'balao' else ('a', 'b')):
                     if (point - QPoint(*obj[key])).manhattanLength() <= 12:
                         self.action = key
                         return
@@ -314,6 +435,10 @@ class Canvas(QWidget):
                     self.arrow_color_changed.emit(obj.get('color', '#ef233c'))
                 if obj['kind'] == 'retângulo':
                     self.rectangle_color_changed.emit(obj.get('color', '#ef233c'))
+                if obj['kind'] == 'balao':
+                    self.bubble_changed.emit()
+                if obj['kind'] == 'texto':
+                    self.text_format_changed.emit()
                 if self.objects[self.selected]['kind'] == 'desfoque':
                     self.blur_selected.emit(self.objects[self.selected]['radius'])
             self.update()
@@ -326,15 +451,22 @@ class Canvas(QWidget):
             self.pending['color'] = self.rectangle_color
         if self.tool == 'numero':
             self.pending['number'] = 1 + sum(obj['kind'] == 'numero' for obj in self.objects)
+        if self.tool == 'balao':
+            self.pending.update(self.bubble_format)
+            self.pending['tail'] = [point.x(), point.y()]
 
     def mouseMoveEvent(self, event):
         if self.begin is None:
             return
-        point = event.position().toPoint()
+        point = self.image_point(event)
         point.setX(max(0, min(point.x(), self.base.width() - 1)))
         point.setY(max(0, min(point.y(), self.base.height() - 1)))
         if self.pending:
             self.pending['b'] = [point.x(), point.y()]
+            if self.pending['kind'] == 'balao':
+                rect = self.object_rect(self.pending)
+                self.pending['tail'] = [max(0, min(self.base.width()-1, rect.center().x()-rect.width()//3)),
+                                        min(self.base.height()-1, rect.bottom()+max(15, rect.height()//3))]
         elif self.action and self.selected is not None:
             obj = self.objects[self.selected]
             if self.action == 'marker_center':
@@ -344,9 +476,10 @@ class Canvas(QWidget):
             elif self.action == 'move':
                 old = self.before[1][self.selected]
                 delta = point - self.begin
-                dx = max(-min(old['a'][0], old['b'][0]), min(delta.x(), self.base.width() - 1 - max(old['a'][0], old['b'][0])))
-                dy = max(-min(old['a'][1], old['b'][1]), min(delta.y(), self.base.height() - 1 - max(old['a'][1], old['b'][1])))
-                for key in ('a', 'b'):
+                keys = ('a', 'b', 'tail') if obj['kind'] == 'balao' else ('a', 'b')
+                dx = max(-min(old[k][0] for k in keys), min(delta.x(), self.base.width() - 1 - max(old[k][0] for k in keys)))
+                dy = max(-min(old[k][1] for k in keys), min(delta.y(), self.base.height() - 1 - max(old[k][1] for k in keys)))
+                for key in keys:
                     obj[key] = [old[key][0] + dx, old[key][1] + dy]
             else:
                 obj[self.action] = [point.x(), point.y()]
@@ -362,7 +495,7 @@ class Canvas(QWidget):
             rect = self.object_rect(self.pending).intersected(self.base.rect())
             if rect.width() < 12 or rect.height() < 12:
                 rect = QRect(self.begin, QPoint(min(self.base.width() - 1, self.begin.x() + 240), min(self.base.height() - 1, self.begin.y() + 80)))
-            obj = {'kind': 'texto', 'a': [rect.left(), rect.top()], 'b': [rect.right(), rect.bottom()], 'text': '', 'font_size': 24}
+            obj = {'kind': 'texto', 'a': [rect.left(), rect.top()], 'b': [rect.right(), rect.bottom()], 'text': '', **self.text_format}
             before = self.before
             self.pending = self.before = self.begin = self.end = None
             self.start_text(obj, before=before)
@@ -374,9 +507,9 @@ class Canvas(QWidget):
                 if self.pending['kind'] == 'recorte':
                     self.base = self.base.copy(rect)
                     for obj in self.objects:
-                        for key in ('a', 'b'):
+                        for key in (('a', 'b', 'tail') if obj['kind'] == 'balao' else ('a', 'b')):
                             obj[key] = [obj[key][0] - rect.x(), obj[key][1] - rect.y()]
-                    self.setFixedSize(self.base.size())
+                    self.sync_size()
                 else:
                     if self.pending['kind'] == 'numero' and (self.end-self.begin).manhattanLength() < 4:
                         a = self.pending['a']
@@ -386,6 +519,9 @@ class Canvas(QWidget):
                     self.tool = 'numero' if self.pending['kind'] == 'numero' else 'selecionar'
                 changed = True
         elif self.action and self.objects != self.before[1]:
+            if self.objects[self.selected]['kind'] == 'texto':
+                self.fit_text_object(self.objects[self.selected])
+                self.ensure_text_space(self.objects[self.selected])
             changed = True
         if changed:
             self.commit(self.before)
@@ -409,19 +545,18 @@ class Canvas(QWidget):
         self.text_editor = editor
         editor.setObjectName('inlineText')
         editor.setFrameStyle(0)
-        editor.setStyleSheet('QPlainTextEdit { background: rgba(24, 28, 35, 225); color: #ef233c; border: 1px solid #60a5fa; padding: 0px; selection-background-color: #365d8c; }')
         editor.setPlaceholderText(tr('Type here…'))
         editor.setToolTip(tr('Ctrl+Enter confirms • Esc cancels • Click outside to confirm'))
-        font = QFont()
-        font.setPixelSize(obj.get('font_size', 24))
-        font.setBold(True)
-        editor.setFont(font)
-        editor.document().setDocumentMargin(0)
-        editor.setGeometry(self.object_rect(obj).intersected(self.base.rect()))
+        editor.document().setDocumentMargin(2)
+        editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        editor.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         editor.setPlainText(obj.get('text', ''))
+        editor.textChanged.connect(self.refresh_text_editor)
+        self.refresh_text_editor()
         editor.show()
         editor.setFocus()
         editor.selectAll()
+        self.text_format_changed.emit()
         self.update()
 
     def finish_text(self, accept=True):
@@ -438,6 +573,8 @@ class Canvas(QWidget):
         if accept and text.strip():
             obj = self.text_object
             obj['text'] = text
+            self.fit_text_object(obj)
+            self.ensure_text_space(obj)
             if index is None:
                 self.objects.append(obj)
                 self.selected = len(self.objects) - 1
@@ -449,10 +586,11 @@ class Canvas(QWidget):
         self._tool = 'selecionar'
         self.tool_changed.emit('selecionar')
         self.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.sync_size()
         self.update()
 
     def mouseDoubleClickEvent(self, event):
-        point = event.position().toPoint()
+        point = self.image_point(event)
         index = next((i for i in reversed(range(len(self.objects))) if self.objects[i]['kind'] == 'texto' and self.object_rect(self.objects[i]).contains(point)), None)
         if index is not None:
             self.pending = self.before = self.begin = self.end = None

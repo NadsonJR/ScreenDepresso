@@ -1,3 +1,13 @@
+## Novidades da versão 0.6.1
+
+- Nenhuma aba visível quando não há imagens abertas.
+- Balões de fala oval, arredondado, pensamento e grito, com modelos e cores de preenchimento/contorno no menu do botão lateral.
+- Balões editáveis, incluindo controle independente da ponta, com desfazer/refazer.
+- Ícone de colar em formato de prancheta.
+- Slider de zoom de 10% a 400% no canto inferior esquerdo, independente por aba, sem alterar a resolução da exportação.
+- Fonte, tamanho e cor do texto configuráveis no menu do botão de texto e em objetos existentes.
+- Caixa de texto cresce automaticamente; se necessário, a área da imagem aumenta com transparência para evitar cortes. A expansão também pode ser desfeita.
+
 ## Novidades da versão 0.6.0
 
 - Várias capturas abertas em abas, com edição, seleção, cores e desfazer/refazer independentes.

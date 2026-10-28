@@ -94,6 +94,17 @@ def icon(symbol, color='#3878a8'):
         fold.quadTo(20, 26, 24, 26)
         fold.lineTo(30, 26)
         p.drawPath(fold)
+    elif symbol == 'paste':
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(11, 10, 26, 29), 3, 3)
+        p.setBrush(QColor(color))
+        p.drawRoundedRect(QRectF(18, 7, 12, 7), 2, 2)
+        p.drawLine(17, 23, 31, 23)
+        p.drawLine(17, 29, 28, 29)
+    elif symbol.startswith('bubble:'):
+        from .annotations import bubble_path
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPath(bubble_path(QRectF(9, 10, 30, 23), {'style': symbol.split(':')[1], 'tail': [17, 40]}))
     elif symbol == 'hand':
         hand = QPainterPath()
         hand.moveTo(18, 37)

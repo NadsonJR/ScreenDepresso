@@ -45,7 +45,7 @@ class CaptureTabs(QTabWidget):
         return canvas
 
     def is_dirty(self, page):
-        return page.widget().snapshot() != page.saved_state
+        return not page.widget().base.isNull() and page.widget().snapshot() != page.saved_state
 
     def update_title(self, page):
         index = self.indexOf(page)
@@ -61,6 +61,7 @@ class CaptureTabs(QTabWidget):
                 name = tr('Capture {number}').format(number=page.number)
         self.setTabText(index, name + (' *' if self.is_dirty(page) else ''))
         self.setTabToolTip(index, str(page.source_path) if page.source_path else name)
+        self.tabBar().setVisible(any(not self.widget(i).widget().base.isNull() for i in range(self.count())))
 
     def retranslate(self):
         self.setToolTip(tr('Switch between captures. Drag tabs to reorder.'))

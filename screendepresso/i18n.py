@@ -129,6 +129,15 @@ CATALOG.update({
  'Discard': 'Descartar', '&Discard': '&Descartar',
  'Could not open this image.': 'Não foi possível abrir esta imagem.',
 })
+CATALOG.update({
+ 'Speech balloon': 'Balão de fala',
+ 'Speech': 'Fala oval', 'Rounded': 'Arredondado', 'Thought': 'Pensamento', 'Shout': 'Grito',
+ 'Balloon fill color…': 'Cor de preenchimento do balão…',
+ 'Balloon outline color…': 'Cor do contorno do balão…',
+ 'Balloon • Drag to draw; move the tail handle to point at an object': 'Balão • Arraste para desenhar; mova a ponta para apontar para um objeto',
+ 'Font family': 'Fonte', 'Font size': 'Tamanho da fonte', 'Text color…': 'Cor do texto…',
+ 'Zoom': 'Zoom', 'Zoom the active capture (10–400%)': 'Zoom da captura ativa (10–400%)',
+})
 REVERSE = {value: key for key, value in CATALOG.items()}
 _language = 'en'
 _translator = None

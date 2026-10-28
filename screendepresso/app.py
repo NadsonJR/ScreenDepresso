@@ -4,11 +4,12 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal, QObject, QSize, QByteArray, QBuffer, QIODevice
-from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction
+from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPainter, QPen, QPixmap, QFont
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QInputDialog, QScrollArea, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
 from .documents import CaptureTabs
+from .annotations import BUBBLE_STYLES
 from .settings import Settings, SettingsDialog
 from .hotkeys import Hotkeys
 from .platform_support import capture_desktop, data_directory, global_hotkeys_available
@@ -152,7 +153,7 @@ class MainWindow(QMainWindow):
             return action
         add_action(ribbon, tr('Save'), 'save', self.save, '#54894d', 'Ctrl+S')
         add_action(ribbon, tr('Copy image'), 'copy', self.copy, '#54894d', 'Ctrl+C')
-        add_action(ribbon, tr('Paste image'), '+', self.paste, '#54894d', 'Ctrl+V')
+        add_action(ribbon, tr('Paste image'), 'paste', self.paste, '#54894d', 'Ctrl+V')
         ribbon.addSeparator()
         add_action(ribbon, tr('Undo'), '↶', lambda: self.canvas.undo(), '#b87b2d', 'Ctrl+Z')
         add_action(ribbon, tr('Redo'), '↷', lambda: self.canvas.redo(), '#b87b2d', 'Ctrl+Y')
@@ -168,7 +169,7 @@ class MainWindow(QMainWindow):
         tools.setMovable(False)
         tools.setIconSize(QSize(40, 40))
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tools)
-        for name, label, symbol in [('selecionar', tr('Select / move'), 'hand'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('numero', tr('Numbered markers'), '1'), ('desfoque', tr('Blur outside selection'), 'blur')]:
+        for name, label, symbol in [('selecionar', tr('Select / move'), 'hand'), ('seta', tr('Arrow'), 'arrow'), ('retângulo', tr('Rectangle'), 'rectangle'), ('texto', tr('Text — drag and type'), 'A'), ('balao', tr('Speech balloon'), 'bubble:oval'), ('numero', tr('Numbered markers'), '1'), ('desfoque', tr('Blur outside selection'), 'blur')]:
             action = add_action(tools, label, symbol, lambda checked=False, t=name: self.choose_tool(t))
             action.setCheckable(True)
             self.tool_group.addAction(action)
@@ -183,6 +184,8 @@ class MainWindow(QMainWindow):
             self.color_actions[name] = color_action
             button.setMenu(menu)
             button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.setup_bubble_menu(tools)
+        self.setup_text_menu(tools)
         self.display_marker_color(self.canvas.marker_color)
         self.display_rectangle_color(self.canvas.rectangle_color)
         self.display_arrow_color(self.canvas.arrow_color)
@@ -249,6 +252,22 @@ class MainWindow(QMainWindow):
         history_action.setToolTip(tr('History'))
         ribbon.addAction(history_action)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
+        zoom_panel = QWidget()
+        zoom_layout = QHBoxLayout(zoom_panel)
+        zoom_layout.setContentsMargins(0, 0, 8, 0)
+        zoom_layout.addWidget(QLabel(tr('Zoom')))
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.zoom_slider.setRange(10, 400)
+        self.zoom_slider.setValue(100)
+        self.zoom_slider.setFixedWidth(150)
+        self.zoom_slider.setToolTip(tr('Zoom the active capture (10–400%)'))
+        self.zoom_slider.valueChanged.connect(self.change_zoom)
+        zoom_layout.addWidget(self.zoom_slider)
+        self.zoom_label = QLabel('100%')
+        self.zoom_label.setMinimumWidth(45)
+        zoom_layout.addWidget(self.zoom_label)
+        zoom_layout.addStretch()
+        self.statusBar().addPermanentWidget(zoom_panel, 1)
         self.statusBar().addPermanentWidget(self.dimensions)
         from . import __version__
         self.version_label = QLabel(f'v{__version__}')
@@ -328,6 +347,9 @@ class MainWindow(QMainWindow):
                 (canvas.rectangle_color_changed, self.display_rectangle_color),
                 (canvas.arrow_color_changed, self.display_arrow_color),
                 (canvas.blur_selected, self.display_blur_radius),
+                (canvas.bubble_changed, self.display_bubble_format),
+                (canvas.text_format_changed, self.display_text_format),
+                (canvas.zoom_changed, self.display_zoom),
             ]:
                 signal.connect(lambda *args, c=canvas, f=callback: f(*args) if self.tabs.currentIndex() >= 0 and self.canvas is c else None)
             canvas.setProperty('windowSignalsConnected', True)
@@ -338,6 +360,9 @@ class MainWindow(QMainWindow):
         self.display_arrow_color(canvas.arrow_color)
         selected = canvas.objects[canvas.selected] if canvas.selected is not None else None
         self.display_blur_radius(selected['radius'] if selected is not None and selected['kind'] == 'desfoque' else canvas.blur_radius)
+        self.display_bubble_format()
+        self.display_text_format()
+        self.display_zoom(round(canvas.zoom*100))
         self.update_dimensions()
         self.tabs.retranslate()
 
@@ -429,6 +454,109 @@ class MainWindow(QMainWindow):
     def choose_tool(self, name):
         self.canvas.tool = name
 
+    def setup_bubble_menu(self, tools):
+        button = tools.widgetForAction(self.tool_actions['balao'])
+        self.bubble_menu = QMenu(button)
+        self.bubble_menu.setToolTipsVisible(True)
+        self.bubble_styles = {}
+        group = QActionGroup(self.bubble_menu)
+        group.setExclusive(True)
+        for style, label in BUBBLE_STYLES.items():
+            action = self.bubble_menu.addAction(toolbar_icon('bubble:'+style), tr(label))
+            action.setCheckable(True)
+            action.setToolTip(tr(label))
+            action.triggered.connect(lambda checked=False, s=style: self.choose_bubble_style(s))
+            group.addAction(action)
+            self.bubble_styles[style] = action
+        self.bubble_menu.addSeparator()
+        for key, label in [('fill', 'Balloon fill color…'), ('outline', 'Balloon outline color…')]:
+            action = self.bubble_menu.addAction(tr(label), lambda k=key: self.choose_bubble_color(k))
+            action.setToolTip(tr(label))
+        button.setMenu(self.bubble_menu)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+
+    def current_bubble_format(self):
+        canvas = self.canvas
+        if canvas.selected is not None and canvas.objects[canvas.selected]['kind'] == 'balao':
+            return canvas.objects[canvas.selected]
+        return canvas.bubble_format
+
+    def choose_bubble_style(self, style):
+        self.canvas.set_bubble_format(style=style)
+        if self.canvas.selected is None or self.canvas.objects[self.canvas.selected]['kind'] != 'balao':
+            self.choose_tool('balao')
+
+    def choose_bubble_color(self, key):
+        color = QColorDialog.getColor(QColor(self.current_bubble_format()[key]), self,
+                                      tr('Balloon fill color…' if key == 'fill' else 'Balloon outline color…'),
+                                      QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if color.isValid():
+            self.canvas.set_bubble_format(**{key: color})
+
+    def display_bubble_format(self):
+        values = self.current_bubble_format()
+        self.bubble_styles[values['style']].setChecked(True)
+        self.tool_actions['balao'].setIcon(toolbar_icon('bubble:'+values['style']))
+
+    def setup_text_menu(self, tools):
+        button = tools.widgetForAction(self.tool_actions['texto'])
+        self.text_menu = QMenu(button)
+        self.text_menu.setToolTipsVisible(True)
+        panel = QWidget()
+        form = QFormLayout(panel)
+        self.text_font = QFontComboBox()
+        self.text_font.setToolTip(tr('Font family'))
+        self.text_font.setCurrentFont(QFont(self.canvas.text_format['font_family']))
+        self.text_font.currentFontChanged.connect(lambda font: self.canvas.set_text_format(font_family=font.family()))
+        form.addRow(tr('Font family'), self.text_font)
+        self.text_size = QSpinBox()
+        self.text_size.setRange(6, 200)
+        self.text_size.setValue(24)
+        self.text_size.setSuffix(' px')
+        self.text_size.setMinimumWidth(115)
+        self.text_size.setToolTip(tr('Font size'))
+        self.text_size.valueChanged.connect(lambda size: self.canvas.set_text_format(font_size=size))
+        form.addRow(tr('Font size'), self.text_size)
+        action = QWidgetAction(self.text_menu)
+        action.setDefaultWidget(panel)
+        self.text_menu.addAction(action)
+        self.text_color_action = self.text_menu.addAction(tr('Text color…'), self.choose_text_color)
+        self.text_color_action.setToolTip(tr('Text color…'))
+        button.setMenu(self.text_menu)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+
+    def choose_text_color(self):
+        color = QColorDialog.getColor(QColor(self.canvas.current_text_format().get('color', '#ef233c')), self,
+                                      tr('Text color…'), QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if color.isValid():
+            self.canvas.set_text_format(color=color)
+
+    def display_text_format(self):
+        values = self.canvas.current_text_format()
+        self.text_font.blockSignals(True)
+        self.text_font.setCurrentFont(QFont(values.get('font_family', QFont().family())))
+        self.text_font.blockSignals(False)
+        self.text_size.blockSignals(True)
+        self.text_size.setValue(values.get('font_size', 24))
+        self.text_size.blockSignals(False)
+        self.tool_actions['texto'].setIcon(toolbar_icon('A', values.get('color', '#ef233c')))
+        self.text_color_action.setIcon(toolbar_icon('A', values.get('color', '#ef233c')))
+
+    def change_zoom(self, percent):
+        scroll = self.scroll
+        canvas = self.canvas
+        center_x = (scroll.horizontalScrollBar().value()+scroll.viewport().width()/2)/canvas.zoom
+        center_y = (scroll.verticalScrollBar().value()+scroll.viewport().height()/2)/canvas.zoom
+        canvas.set_zoom(percent)
+        scroll.horizontalScrollBar().setValue(round(center_x*canvas.zoom-scroll.viewport().width()/2))
+        scroll.verticalScrollBar().setValue(round(center_y*canvas.zoom-scroll.viewport().height()/2))
+
+    def display_zoom(self, percent):
+        self.zoom_slider.blockSignals(True)
+        self.zoom_slider.setValue(percent)
+        self.zoom_slider.blockSignals(False)
+        self.zoom_label.setText(f'{percent}%')
+
     def sync_tool(self, name):
         if name in self.tool_actions:
             self.tool_actions[name].setChecked(True)
@@ -437,7 +565,7 @@ class MainWindow(QMainWindow):
             for action in self.tool_actions.values():
                 action.setChecked(False)
             self.tool_group.setExclusive(True)
-        hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp'), 'numero': tr('Numbers • Click for the next number; drag from the circle to its target')}
+        hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp'), 'numero': tr('Numbers • Click for the next number; drag from the circle to its target'), 'balao': tr('Balloon • Drag to draw; move the tail handle to point at an object')}
         self.tool_hint.setText(hints[name])
         self.tool_hint.setToolTip(hints[name])
 
@@ -479,7 +607,8 @@ class MainWindow(QMainWindow):
         if self.canvas.base.isNull():
             self.dimensions.setText(tr('No image • Capture a screen to get started'))
         else:
-            self.dimensions.setText(f'{self.canvas.base.width()} × {self.canvas.base.height()} px • 100%')
+            self.dimensions.setText(f'{self.canvas.base.width()} × {self.canvas.base.height()} px')
+        self.zoom_slider.setEnabled(not self.canvas.base.isNull())
 
     def display_blur_radius(self, radius):
         self.blur_strength.blockSignals(True)
@@ -490,7 +619,7 @@ class MainWindow(QMainWindow):
         self.blur_slider.blockSignals(False)
 
     def show_shortcuts(self):
-        self.statusBar().showMessage(' • '.join((f'{value}: {mode_label(mode)}' for mode, value in self.settings.hotkeys.items())))
+        self.statusBar().setToolTip(' • '.join((f'{value}: {mode_label(mode)}' for mode, value in self.settings.hotkeys.items())))
 
     def apply_settings(self, directory, hotkeys, language=None):
         old = self.settings.hotkeys.copy()
@@ -655,10 +784,20 @@ def run_application(app, instance):
         window.copy()
         if window.tabs.count() != 2 or QApplication.clipboard().image() != second:
             raise RuntimeError('Capture tabs smoke test failed')
+        canvas = window.canvas
+        canvas.objects.append({'kind': 'balao', 'a': [5, 5], 'b': [110, 55], 'tail': [15, 75], **canvas.bubble_format})
+        canvas.start_text({'kind': 'texto', 'a': [15, 10], 'b': [105, 50], 'text': 'Smoke', **canvas.text_format})
+        canvas.finish_text()
+        rendered = canvas.image
+        if rendered == second or len(canvas.objects) != 2:
+            raise RuntimeError('Balloon and text smoke test failed')
+        window.zoom_slider.setValue(150)
+        if canvas.zoom != 1.5 or canvas.image != rendered:
+            raise RuntimeError('Zoom changed the exported image')
         window.tabs.setCurrentIndex(0)
         if window.canvas.image != image:
             raise RuntimeError('First capture was lost after opening another tab')
-        print('Interface, abas, histórico e clipboard: OK (offscreen)', flush=True)
+        print('Interface, abas, balões, texto, zoom, histórico e clipboard: OK (offscreen)', flush=True)
         QTimer.singleShot(100, window.request_quit)
     sys.exit(app.exec())
 if __name__ == '__main__':
