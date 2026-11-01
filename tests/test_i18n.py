@@ -26,7 +26,7 @@ def test_english_default_and_live_portuguese_setting(tmp_path, monkeypatch):
         assert settings.shortcuts['tela'].keySequence().toString(QKeySequence.SequenceFormat.PortableText) == 'Ctrl+Shift+1'
         assert settings.shortcuts['tela'].findChild(QLineEdit).text()
         tabs = settings.findChild(QTabWidget)
-        assert [tabs.tabText(i) for i in range(tabs.count())] == ['Hotkeys', 'Files', 'Updates', 'Language']
+        assert [tabs.tabText(i) for i in range(tabs.count())] == ['Hotkeys', 'Files', 'Updates', 'Recording', 'Language']
         assert [settings.language.itemData(i) for i in range(settings.language.count())] == ['en', 'pt_BR']
         settings.language.setCurrentIndex(1)
         settings.save()
@@ -37,7 +37,7 @@ def test_english_default_and_live_portuguese_setting(tmp_path, monkeypatch):
         translated = SettingsDialog(window)
         assert translated.windowTitle() == 'Configurações'
         translated_tabs = translated.findChild(QTabWidget)
-        assert translated_tabs.tabText(3) == 'Idioma'
+        assert translated_tabs.tabText(4) == 'Idioma'
         assert translated.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).text().replace('&', '') == 'Salvar'
         update = UpdatePanel(window)
         assert update.button.text() == 'Verificar atualizações'

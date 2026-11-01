@@ -54,11 +54,11 @@ def main():
     docs.mkdir(parents=True)
     shutil.copy2(ROOT / 'README.md', docs)
     (docs / 'THIRD_PARTY.txt').write_text(
-        'Contains Python, Qt/PySide6, Shiboken6, Pillow, Send2Trash, python-xlib and six.\n'
+        'Contains Python, Qt/PySide6 (including Qt Multimedia with FFmpeg, LGPL), Shiboken6, Pillow, Send2Trash, python-xlib and six.\n'
         'Their license notices are preserved in licenses/. Qt libraries are dynamically linked.\n'
         'Qt/PySide6 upstream sources and license information: https://code.qt.io/ and https://www.qt.io/licensing/\n'
         'Application source and build instructions: https://github.com/NadsonJR/ScreenDepresso\n')
-    for name in ('PySide6', 'PySide6-Essentials', 'shiboken6', 'Pillow', 'Send2Trash', 'python-xlib', 'six', 'pyinstaller'):
+    for name in ('PySide6', 'PySide6-Essentials', 'PySide6-Addons', 'shiboken6', 'Pillow', 'Send2Trash', 'python-xlib', 'six', 'pyinstaller'):
         dist = importlib.metadata.distribution(name)
         for entry in dist.files or []:
             if any(word in str(entry).lower() for word in ('license', 'copying', 'copyright', 'notice')):

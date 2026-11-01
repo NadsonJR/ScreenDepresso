@@ -1,19 +1,25 @@
-"""Image directory operations and a thumbnail workspace with copy-only dragging."""
+"""Image and video directory operations and a thumbnail workspace with copy-only dragging."""
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import deque
 from html import escape
+import os
 import sys
 from send2trash import send2trash
 from PySide6.QtCore import (Qt, QSize, QTimer, QFile, QMimeData, QUrl,
                             QFileSystemWatcher, QByteArray, QBuffer, QIODevice, Signal, QEvent)
-from PySide6.QtGui import QIcon, QImage, QImageReader, QDrag, QPixmap
+from PySide6.QtGui import QIcon, QImage, QImageReader, QDrag, QPixmap, QPainter, QColor, QPolygonF
+from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QToolButton, QLabel, QMenu,
                                QListWidget, QListWidgetItem, QListView, QAbstractItemView)
 from .i18n import tr, native_help
 from .appearance import icon
 
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tif', '.tiff'}
+VIDEO_SUFFIXES = {'.mp4', '.webm', '.mkv', '.mov', '.avi'}
+# Hidden helpers inside the workspace; subfolders are never listed or trimmed.
+THUMBNAILS = '.thumbnails'
+RECORDING = '.recording'
 WORKSPACE_LIMITS = (25, 50, 75, 100, 0)
 
 
@@ -25,6 +31,10 @@ def move_to_trash(path):
             raise OSError(tr('Could not move this image to the system trash.'))
     else:
         send2trash(str(path))
+
+
+def is_video(path):
+    return Path(path).suffix.lower() in VIDEO_SUFFIXES
 
 
 def read_image(path):
@@ -43,15 +53,59 @@ class WorkspaceStore:
         self._last_saved_time = None
         self.retention_error = ''
 
-    def entries(self):
+    def _list(self, suffixes):
         def key(path):
             try:
                 return path.stat().st_mtime_ns, path.name
             except OSError:
                 return 0, path.name
         return sorted((path for path in self.directory.iterdir()
-                       if not path.is_symlink() and path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES),
+                       if not path.is_symlink() and path.is_file() and path.suffix.lower() in suffixes),
                       key=key, reverse=True)
+
+    def entries(self):
+        """Images only: the workspace limit never trashes recordings."""
+        return self._list(IMAGE_SUFFIXES)
+
+    def videos(self):
+        return self._list(VIDEO_SUFFIXES)
+
+    def items(self):
+        return self._list(IMAGE_SUFFIXES | VIDEO_SUFFIXES)
+
+    def recording_target(self):
+        """Return (temporary, final) paths for a new recording. The video is
+        written in a hidden subfolder and moved in by add_video when complete."""
+        stamp = datetime.now()
+        while True:
+            name = stamp.strftime('%Y%m%d-%H%M%S-%f')+'.mp4'
+            final = self.directory/name
+            temporary = self.directory/RECORDING/name
+            if not final.exists() and not temporary.exists():
+                temporary.parent.mkdir(exist_ok=True)
+                return temporary, final
+            stamp += timedelta(microseconds=1)
+
+    def add_video(self, temporary, final, poster=None):
+        temporary, final = Path(temporary), Path(final)
+        if final.exists():
+            raise OSError(tr('Could not save the recording in the workspace.'))
+        os.replace(temporary, final)
+        try:
+            temporary.parent.rmdir()
+        except OSError:
+            pass
+        if poster is not None and not poster.isNull():
+            thumbnail = self.thumbnail_path(final)
+            try:
+                thumbnail.parent.mkdir(exist_ok=True)
+                poster.save(str(thumbnail), 'PNG')
+            except OSError:
+                pass  # A missing thumbnail only shows the placeholder.
+        return final
+
+    def thumbnail_path(self, video):
+        return self.directory/THUMBNAILS/(Path(video).name+'.png')
 
     def _write(self, payload, suffix='.png'):
         stamp = datetime.now()
@@ -86,12 +140,14 @@ class WorkspaceStore:
     def require_path(self, path):
         path = Path(path)
         if (path.is_symlink() or path.parent.resolve() != self.directory.resolve()
-                or path.suffix.lower() not in IMAGE_SUFFIXES or not path.is_file()):
+                or path.suffix.lower() not in IMAGE_SUFFIXES | VIDEO_SUFFIXES or not path.is_file()):
             raise OSError(tr('This image is no longer available in the workspace.'))
         return path
 
     def duplicate(self, path):
         path = self.require_path(path)
+        if is_video(path):
+            raise OSError(tr('Recordings cannot be duplicated in the workspace.'))
         return self._write(path.read_bytes(), path.suffix)
 
     def trash(self, path):
@@ -100,6 +156,8 @@ class WorkspaceStore:
             move_to_trash(path)
         except OSError as exc:
             raise OSError(tr('Could not move this image to the system trash.')) from exc
+        if is_video(path):
+            self.thumbnail_path(path).unlink(missing_ok=True)
         self.retention_error = ''
 
     def enforce_limit(self, protect=None):
@@ -173,6 +231,8 @@ class WorkspaceGrid(QListWidget):
 
 
 class WorkspaceView(QWidget):
+    open_requested = Signal(str)
+
     def __init__(self, store, parent=None):
         super().__init__(parent)
         self.setObjectName('workspaceView')
@@ -196,7 +256,7 @@ class WorkspaceView(QWidget):
         self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.grid.customContextMenuRequested.connect(self.show_context_menu)
         self.grid.delete_requested.connect(self.delete_selected)
-        self.grid.duplicate_requested.connect(self.duplicate_selected)
+        self.grid.duplicate_requested.connect(lambda: None if is_video(self.selected_path() or '') else self.duplicate_selected())
         layout.addWidget(self.grid, 1)
         self.status = QLabel()
         self.status.setTextFormat(Qt.TextFormat.PlainText)
@@ -240,9 +300,14 @@ class WorkspaceView(QWidget):
         self.grid.setCurrentItem(item)
         path = self.selected_path()
         menu = QMenu(self)
-        duplicate = menu.addAction(tr('Duplicate'))
-        duplicate.setToolTip(native_help('Duplicate selected image (Ctrl+D)'))
-        duplicate.triggered.connect(lambda: self.duplicate_selected(path))
+        if is_video(path):
+            play = menu.addAction(tr('Play video'))
+            play.setToolTip(tr('Open the recording in the default video player'))
+            play.triggered.connect(lambda: self.open_requested.emit(str(path)))
+        else:
+            duplicate = menu.addAction(tr('Duplicate'))
+            duplicate.setToolTip(native_help('Duplicate selected image (Ctrl+D)'))
+            duplicate.triggered.connect(lambda: self.duplicate_selected(path))
         delete = menu.addAction(tr('Delete'))
         delete.setToolTip(tr('Move selected image to the system trash (Delete)'))
         delete.triggered.connect(lambda: self.delete_selected(path))
@@ -263,11 +328,12 @@ class WorkspaceView(QWidget):
         self._pending.clear()
         self.grid.clear()
         try:
-            entries = self.store.entries()
+            entries = self.store.items()
         except OSError as exc:
             self._message = ('Could not read the workspace: {details}', {'details': str(exc)})
             entries = []
         placeholder = icon('▧')
+        video_icon = video_placeholder()
         valid_keys = set()
         for path in entries:
             try:
@@ -276,7 +342,7 @@ class WorkspaceView(QWidget):
             except OSError:
                 continue
             valid_keys.add(key)
-            item = QListWidgetItem(self._cache.get(key, placeholder), path.name)
+            item = QListWidgetItem(self._cache.get(key, video_icon if is_video(path) else placeholder), path.name)
             item.setData(Qt.ItemDataRole.UserRole, str(path))
             item.setToolTip(escape(path.name))
             self.grid.addItem(item)
@@ -297,6 +363,12 @@ class WorkspaceView(QWidget):
     def load_thumbnails(self):
         for _ in range(min(8, len(self._pending))):
             path, key, item = self._pending.popleft()
+            if is_video(path):
+                thumbnail = video_thumbnail(self.store.thumbnail_path(path))
+                if thumbnail is not None:
+                    self._cache[key] = thumbnail
+                    item.setIcon(thumbnail)
+                continue
             reader = QImageReader(str(path))
             reader.setAutoTransform(True)
             size = reader.size()
@@ -341,13 +413,17 @@ class WorkspaceView(QWidget):
     def retranslate(self):
         self.refresh_button.setToolTip(tr('Refresh workspace thumbnails'))
         self.refresh_button.setAccessibleName(tr('Refresh'))
-        self.grid.setToolTip(tr('Double-click to open an image. Drag a thumbnail onto the editor to add it as an editable image.'))
+        self.grid.setToolTip(tr('Double-click to open an image or play a recording. Drag a thumbnail onto the editor to add it as an editable image.'))
         for index in range(self.grid.count()):
             item = self.grid.item(index)
             if item.data(Qt.ItemDataRole.UserRole+1):
                 item.setToolTip(escape(item.text())+'\n'+tr('Could not load the thumbnail.'))
         limit = str(self.store.limit) if self.store.limit else tr('No limit')
-        self.count_label.setText(tr('Images: {count} • Limit: {limit}').format(count=self.grid.count(), limit=limit))
+        videos = sum(is_video(self.grid.item(index).text()) for index in range(self.grid.count()))
+        text = tr('Images: {count} • Limit: {limit}').format(count=self.grid.count()-videos, limit=limit)
+        if videos:
+            text += ' • '+tr('Recordings: {count}').format(count=videos)
+        self.count_label.setText(text)
         if self.store.retention_error:
             message = tr('Could not apply the workspace limit: {details}').format(details=tr(self.store.retention_error))
         elif self._message:
@@ -355,7 +431,7 @@ class WorkspaceView(QWidget):
             if 'details' in details:
                 details['details'] = tr(details['details'])
             message = tr(self._message[0]).format(**details)
-        elif self.store.limit and self.grid.count() > self.store.limit:
+        elif self.store.limit and self.grid.count()-videos > self.store.limit:
             message = tr('The limit will be applied when an image is saved.')
         else:
             message = ''
@@ -369,3 +445,32 @@ class WorkspaceView(QWidget):
         paths = self.watcher.files()+self.watcher.directories()
         if paths:
             self.watcher.removePaths(paths)
+
+
+def play_badge(pixmap):
+    """Overlay a round play symbol so recordings stand out from images."""
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    size = min(pixmap.width(), pixmap.height())*.38
+    center = QPointF(pixmap.width()/2, pixmap.height()/2)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(0, 0, 0, 150))
+    painter.drawEllipse(center, size/2, size/2)
+    painter.setBrush(QColor('white'))
+    r = size/5
+    painter.drawPolygon(QPolygonF([center+QPointF(-r*.8, -r), center+QPointF(-r*.8, r), center+QPointF(r*1.2, 0)]))
+    painter.end()
+    return pixmap
+
+
+def video_placeholder():
+    pixmap = QPixmap(240, 180)
+    pixmap.fill(QColor('#202B37'))
+    return QIcon(play_badge(pixmap))
+
+
+def video_thumbnail(path):
+    image = read_image(path)
+    if image.isNull():
+        return None
+    return QIcon(play_badge(QPixmap.fromImage(image)))

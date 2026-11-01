@@ -6,10 +6,11 @@ import re
 import tempfile
 from pathlib import Path
 from .workspace import WORKSPACE_LIMITS
+from .recorder import FRAME_RATES, QUALITIES, COUNTDOWNS, default_recording, normalize_recording
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget, QWidget, QKeySequenceEdit, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QLabel, QMessageBox, QComboBox
-DEFAULT_HOTKEYS = {'tela': 'Ctrl+Shift+1', 'janela': 'Ctrl+Shift+2', 'região': 'Ctrl+Shift+3'}
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget, QWidget, QKeySequenceEdit, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QLabel, QMessageBox, QComboBox, QCheckBox
+DEFAULT_HOTKEYS = {'tela': 'Ctrl+Shift+1', 'janela': 'Ctrl+Shift+2', 'região': 'Ctrl+Shift+3', 'gravação': 'Ctrl+Alt+R'}
 
 def parse_hotkey(value):
     parts = value.split('+')
@@ -34,6 +35,7 @@ class Settings:
         self.hotkeys = DEFAULT_HOTKEYS.copy()
         self.language = 'en'
         self.workspace_limit = 25
+        self.recording = default_recording()
         try:
             try:
                 content = self.path.read_text(encoding='utf-8')
@@ -43,7 +45,11 @@ class Settings:
                 content = self.path.read_text(encoding=locale.getpreferredencoding(False))
             data = json.loads(content)
             shortcuts = data['hotkeys']
-            if set(shortcuts) != set(DEFAULT_HOTKEYS) or len({parse_hotkey(v) for v in shortcuts.values()}) != 3:
+            self.recording = normalize_recording(data.get('recording'))
+            if isinstance(shortcuts, dict) and 'gravação' not in shortcuts:
+                # Settings written before screen recording: keep the capture keys.
+                shortcuts = dict(shortcuts, gravação=DEFAULT_HOTKEYS['gravação'])
+            if set(shortcuts) != set(DEFAULT_HOTKEYS) or len({parse_hotkey(v) for v in shortcuts.values()}) != len(DEFAULT_HOTKEYS):
                 raise ValueError(tr('Invalid hotkeys'))
             if not isinstance(data['directory'], str) or not Path(data['directory']).is_absolute():
                 raise ValueError(tr('Invalid directory'))
@@ -54,7 +60,8 @@ class Settings:
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             pass
 
-    def save(self, directory, hotkeys, language=None, workspace_limit=None):
+    def save(self, directory, hotkeys, language=None, workspace_limit=None, recording=None):
+        recording = normalize_recording(self.recording if recording is None else recording)
         language = self.language if language is None else language
         if language not in ('en', 'pt_BR'):
             raise ValueError(tr('Unsupported language'))
@@ -65,7 +72,7 @@ class Settings:
         fd, temporary = tempfile.mkstemp(dir=self.path.parent)
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-                json.dump({'directory': directory, 'hotkeys': hotkeys, 'language': language, 'workspace_limit': workspace_limit}, stream, ensure_ascii=False)
+                json.dump({'directory': directory, 'hotkeys': hotkeys, 'language': language, 'workspace_limit': workspace_limit, 'recording': recording}, stream, ensure_ascii=False)
             os.replace(temporary, self.path)
         finally:
             if os.path.exists(temporary):
@@ -73,6 +80,7 @@ class Settings:
         self.directory, self.hotkeys = (directory, hotkeys.copy())
         self.language = language
         self.workspace_limit = workspace_limit
+        self.recording = recording
 
 class SettingsDialog(QDialog):
 
@@ -126,6 +134,7 @@ class SettingsDialog(QDialog):
         self.update_panel = parent.update_panel
         self.updates_index = tabs.addTab(self.update_panel, tr('Updates'))
         self.finished.connect(self.release_update_panel)
+        tabs.addTab(self.recording_page(parent.settings.recording), tr('Recording'))
         language_page = QWidget()
         language_form = QFormLayout(language_page)
         self.language = QComboBox()
@@ -149,6 +158,58 @@ class SettingsDialog(QDialog):
         layout.addWidget(buttons)
         tabs.currentChanged.connect(self.sync_buttons)
         self.sync_buttons(tabs.currentIndex())
+
+    def recording_page(self, options):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        form = QFormLayout()
+        self.recording_fps = QComboBox()
+        self.recording_fps.setToolTip(tr('Frames per second:'))
+        for fps in FRAME_RATES:
+            self.recording_fps.addItem(f'{fps} fps', fps)
+        self.recording_fps.setCurrentIndex(self.recording_fps.findData(options['fps']))
+        form.addRow(tr('Frames per second:'), self.recording_fps)
+        self.recording_quality = QComboBox()
+        self.recording_quality.setProperty('translateItems', True)
+        self.recording_quality.setToolTip(tr('Video quality:'))
+        for key, label in QUALITIES.items():
+            self.recording_quality.addItem(tr(label), key)
+        self.recording_quality.setCurrentIndex(self.recording_quality.findData(options['quality']))
+        form.addRow(tr('Video quality:'), self.recording_quality)
+        self.recording_countdown = QComboBox()
+        self.recording_countdown.setToolTip(tr('Countdown before recording:'))
+        for seconds in COUNTDOWNS:
+            self.recording_countdown.addItem(tr('{seconds} seconds').format(seconds=seconds) if seconds else tr('Off'), seconds)
+        self.recording_countdown.setCurrentIndex(self.recording_countdown.findData(options['countdown']))
+        form.addRow(tr('Countdown before recording:'), self.recording_countdown)
+        self.recording_microphone = QCheckBox(tr('Record microphone audio'))
+        self.recording_microphone.setToolTip(tr('Record microphone audio'))
+        self.recording_microphone.setChecked(options['microphone'])
+        form.addRow(self.recording_microphone)
+        self.recording_device = QComboBox()
+        self.recording_device.setToolTip(tr('Microphone:'))
+        self.recording_device.addItem(tr('System default'), '')
+        try:
+            from .recorder import microphones
+            for name, key in microphones():
+                self.recording_device.addItem(name, key)
+        except Exception:
+            pass
+        self.recording_device.setCurrentIndex(max(0, self.recording_device.findData(options['microphone_device'])))
+        self.recording_device.setEnabled(options['microphone'])
+        self.recording_microphone.toggled.connect(self.recording_device.setEnabled)
+        form.addRow(tr('Microphone:'), self.recording_device)
+        layout.addLayout(form)
+        note = QLabel(tr("Recordings are saved in the workspace as MP4: H.264 when the system provides an encoder, otherwise MPEG-4. Lower frame rates and quality use less CPU and disk."))
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch()
+        return page
+
+    def recording_options(self):
+        return {'fps': self.recording_fps.currentData(),
+                'quality': self.recording_quality.currentData(), 'countdown': self.recording_countdown.currentData(),
+                'microphone': self.recording_microphone.isChecked(), 'microphone_device': self.recording_device.currentData()}
 
     def check_updates(self):
         self.show_updates()
@@ -188,7 +249,8 @@ class SettingsDialog(QDialog):
             directory.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryFile(dir=directory):
                 pass
-            self.owner.apply_settings(str(directory), hotkeys, self.language.currentData(), self.workspace_limit.currentData())
+            self.owner.apply_settings(str(directory), hotkeys, self.language.currentData(), self.workspace_limit.currentData(),
+                                      self.recording_options())
         except (ValueError, OSError, RuntimeError) as exc:
             QMessageBox.warning(self, tr('Settings'), str(exc))
             return

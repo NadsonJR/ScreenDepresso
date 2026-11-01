@@ -2,8 +2,8 @@ from .i18n import tr, mode_label, set_language, translate_tree, native_help
 import os
 import sys
 from pathlib import Path
-from PySide6.QtCore import Qt, QRect, QTimer, QSize
-from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont, QFontDatabase
+from PySide6.QtCore import Qt, QRect, QTimer, QSize, QUrl
+from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont, QFontDatabase, QCursor, QDesktopServices
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
 from .editor import Canvas
@@ -17,7 +17,9 @@ from .hotkeys import Hotkeys
 from .platform_support import capture_desktop, crop_desktop, global_hotkeys_available
 from .capture_ui import Selector, WindowPicker
 from .update_panel import UpdatePanel
-from .workspace import WorkspaceStore as History, WorkspaceView, read_image
+from .recorder import ScreenRecorder, capturable_window
+from .recording_ui import Countdown, RecordingBar, RegionFrame
+from .workspace import WorkspaceStore as History, WorkspaceView, read_image, is_video
 
 def windows():
     if sys.platform == 'darwin':
@@ -132,6 +134,15 @@ class MainWindow(QMainWindow):
         add_action(ribbon, tr('Window'), 'window', lambda: self.capture('janela'))
         add_action(ribbon, tr('Region'), 'region', lambda: self.capture('região'))
         ribbon.addSeparator()
+        self.record_action = add_action(ribbon, tr('Record'), 'record', self.record_clicked, TOKENS['danger'])
+        self.record_action.setToolTip(tr('Record the screen'))
+        self.record_menu = QMenu(ribbon)
+        self.record_menu.setToolTipsVisible(True)
+        self.record_menu.aboutToShow.connect(self.refresh_record_menu)
+        self.record_button = ribbon.widgetForAction(self.record_action)
+        self.record_button.setMenu(self.record_menu)
+        self.record_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        ribbon.addSeparator()
         add_action(ribbon, tr('Settings'), 'settings', self.open_settings)
         tools = QToolBar(tr('Tools'), self)
         tools.setObjectName('tools')
@@ -228,6 +239,7 @@ class MainWindow(QMainWindow):
         self.workspace = WorkspaceView(self.history, self)
         self.list = self.workspace.grid
         self.list.itemDoubleClicked.connect(self.open_history)
+        self.workspace.open_requested.connect(self.play_video)
         self.history_dock = QDockWidget(tr('Workspace'), self)
         self.history_dock.setObjectName('workspace')
         self.history_dock.setWidget(self.workspace)
@@ -288,6 +300,15 @@ class MainWindow(QMainWindow):
         self.update_panel.hide()
         self.update_panel.quit_requested.connect(self.request_quit)
         QApplication.instance().aboutToQuit.connect(self.update_panel.shutdown)
+        self.recorder = ScreenRecorder(self)
+        self.recorder.state_changed.connect(self.recording_state_changed)
+        self.recorder.saved.connect(self.recording_saved)
+        self.recorder.failed.connect(self.recording_failed)
+        self.recording_bar = None
+        self.region_frame = None
+        self.countdown = None
+        self.last_recording = None
+        self._restore_after_recording = False
         self.hotkeys = Hotkeys()
         self.hotkeys.capture.connect(self.capture)
         self.hotkeys.failed.connect(lambda message: self.statusBar().showMessage(message))
@@ -306,6 +327,11 @@ class MainWindow(QMainWindow):
         for mode in ['tela', 'janela', 'região']:
             menu.addAction(tr({'tela': 'Capture full screen', 'janela': 'Capture window', 'região': 'Capture region'}[mode]), lambda m=mode: self.capture(m))
         menu.addSeparator()
+        self.tray_record_menu = menu.addMenu(toolbar_icon('record', TOKENS['danger'], plate=False), tr('Record screen'))
+        self.tray_record_menu.aboutToShow.connect(lambda: self.refresh_record_menu(self.tray_record_menu))
+        self.tray_stop_action = menu.addAction(toolbar_icon('stop', TOKENS['danger'], plate=False), tr('Stop recording'), lambda: self.recorder.stop())
+        self.tray_stop_action.setVisible(False)
+        menu.addSeparator()
         menu.addAction(tr('Settings'), self.open_settings)
         menu.addAction(tr('Check for updates'), self.check_updates)
         menu.addAction(tr('About'), self.show_about)
@@ -316,6 +342,7 @@ class MainWindow(QMainWindow):
             action.setToolTip(action.text())
         self.tray.setToolTip('ScreenDepresso')
         self.tray.activated.connect(self.tray_activated)
+        self.tray.messageClicked.connect(self.open_last_recording)
         self.tray.setContextMenu(menu)
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
@@ -508,6 +535,11 @@ class MainWindow(QMainWindow):
             self.showMinimized()
 
     def stop_background_services(self):
+        if self.countdown is not None:
+            self.countdown.cancel()
+        if self.recorder.active:
+            self.recorder.wait_stopped()
+        self.close_recording_overlays()
         self.hotkeys.stop()
         self.workspace.stop()
         self.tray.hide()
@@ -822,7 +854,7 @@ class MainWindow(QMainWindow):
     def show_shortcuts(self):
         self.statusBar().setToolTip(' • '.join((f'{value}: {mode_label(mode)}' for mode, value in self.settings.hotkeys.items())))
 
-    def apply_settings(self, directory, hotkeys, language=None, workspace_limit=None):
+    def apply_settings(self, directory, hotkeys, language=None, workspace_limit=None, recording=None):
         workspace_limit = self.settings.workspace_limit if workspace_limit is None else workspace_limit
         apply_limit = directory != self.settings.directory or workspace_limit != self.settings.workspace_limit
         old = self.settings.hotkeys.copy()
@@ -830,7 +862,7 @@ class MainWindow(QMainWindow):
         if changed and global_hotkeys_available():
             self.hotkeys.configure(hotkeys)
         try:
-            self.settings.save(directory, hotkeys, language, workspace_limit)
+            self.settings.save(directory, hotkeys, language, workspace_limit, recording)
         except OSError:
             if changed and global_hotkeys_available():
                 self.hotkeys.configure(old)
@@ -851,6 +883,9 @@ class MainWindow(QMainWindow):
 
     def open_history(self, item):
         path = self.history.directory / item.text()
+        if is_video(path):
+            self.play_video(path)
+            return
         image = read_image(path)
         if image.isNull():
             QMessageBox.warning(self, tr('Workspace'), tr('Could not open this image.'))
@@ -879,7 +914,10 @@ class MainWindow(QMainWindow):
         self.open_editor()
 
     def capture(self, mode, screen_name=None):
-        if self._quitting or self._capture_pending:
+        if mode == 'gravação':
+            self.toggle_recording()
+            return
+        if self._quitting or self._capture_pending or self.recorder.active:
             return
         if sys.platform == 'darwin':
             from .macos_backend import ensure_screen_permission
@@ -959,6 +997,269 @@ class MainWindow(QMainWindow):
             self.refresh()
         except OSError as exc:
             QMessageBox.warning(self, tr('Workspace'), str(exc))
+
+    def record_clicked(self):
+        if self.recorder.active:
+            self.recorder.stop()
+            return
+        self.record_menu.popup(self.record_button.mapToGlobal(self.record_button.rect().bottomLeft()))
+
+    def refresh_record_menu(self, menu=None):
+        menu = menu if isinstance(menu, QMenu) else self.record_menu
+        menu.clear()
+        menu.setToolTipsVisible(True)
+        if self.recorder.active:
+            menu.addAction(toolbar_icon('stop', TOKENS['danger'], plate=False), tr('Stop recording'), lambda: self.recorder.stop())
+            return
+        screens = QApplication.screens()
+        action = menu.addAction(toolbar_icon('monitor', plate=False), tr('Record full screen'), lambda: self.record('tela'))
+        action.setToolTip(tr('Records the monitor under the mouse pointer.'))
+        if len(screens) > 1:
+            for index, screen in enumerate(screens):
+                label = '    '+tr('Monitor {number}').format(number=index+1)+' • '+screen.name()
+                menu.addAction(label, lambda checked=False, name=screen.name(): self.record('tela', name))
+        menu.addAction(toolbar_icon('window', plate=False), tr('Record window…'), lambda: self.record('janela'))
+        menu.addAction(toolbar_icon('region', plate=False), tr('Record region…'), lambda: self.record('região'))
+        menu.addSeparator()
+        microphone = menu.addAction(tr('Record microphone audio'))
+        microphone.setCheckable(True)
+        microphone.setChecked(self.settings.recording['microphone'])
+        microphone.toggled.connect(self.set_recording_microphone)
+        menu.addSeparator()
+        last = menu.addAction(tr('Open last recording'), self.open_last_recording)
+        last.setEnabled(self.last_recording is not None and Path(self.last_recording).exists())
+        shortcut = self.settings.hotkeys.get('gravação')
+        if shortcut:
+            hint = menu.addAction(tr('Start / stop with {shortcut}').format(shortcut=shortcut))
+            hint.setEnabled(False)
+
+    def set_recording_microphone(self, enabled):
+        try:
+            self.settings.save(self.settings.directory, self.settings.hotkeys,
+                               recording=dict(self.settings.recording, microphone=enabled))
+        except OSError as exc:
+            self.statusBar().showMessage(str(exc), 4000)
+
+    def open_last_recording(self):
+        if self.last_recording and Path(self.last_recording).exists():
+            self.play_video(self.last_recording)
+
+    def play_video(self, path):
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            self.statusBar().showMessage(tr('Could not open this recording.'), 4000)
+
+    def toggle_recording(self):
+        if self.countdown is not None:
+            self.countdown.cancel()
+        elif self.recorder.active:
+            self.recorder.stop()
+        else:
+            self.record('tela')
+
+    def record(self, mode, screen_name=None):
+        if self._quitting or self._capture_pending or self.recorder.active:
+            return
+        if sys.platform == 'darwin':
+            from .macos_backend import ensure_screen_permission
+            try:
+                ensure_screen_permission()
+            except RuntimeError as exc:
+                QMessageBox.warning(self, tr('Recording'), str(exc))
+                return
+        self.canvas.finish_text()
+        self._capture_pending = True
+        self._restore_after_recording = self.isVisible() and not self.isMinimized()
+        if self._settings_dialog is not None:
+            self._settings_dialog.hide()
+        self.hide()
+        QTimer.singleShot(350, lambda: self.prepare_recording(mode, screen_name))
+
+    def prepare_recording(self, mode, screen_name=None):
+        if self._quitting:
+            return
+        try:
+            if mode == 'tela':
+                screens = QApplication.screens()
+                screen = next((s for s in screens if s.name() == screen_name), None) if screen_name else None
+                screen = screen or QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+                self.start_recording(('screen', screen), screen.geometry(), screen)
+            elif mode == 'região':
+                pixmap, geometry = capture_desktop()
+                self.selector = Selector(pixmap, geometry, self)
+                self.selector.selected.connect(self.record_region)
+                self.selector.cancelled.connect(self.cancel_recording)
+                self.selector.show()
+            else:
+                desktop, geometry = capture_desktop()
+                choices = [choice for choice in windows() if choice[1].intersects(geometry)]
+                if not choices:
+                    raise RuntimeError(tr('No windows available.'))
+                picker = WindowPicker(choices, desktop, geometry, self)
+                picker.setWindowTitle(tr('Record window'))
+                try:
+                    target = picker.selected_window() if picker.exec() == picker.DialogCode.Accepted else None
+                finally:
+                    picker.deleteLater()
+                if target is None:
+                    self.cancel_recording()
+                    return
+                self.hide()
+                activate_window(target[2])
+                QTimer.singleShot(450, lambda: self.record_window(target))
+        except Exception as exc:
+            self.cancel_recording()
+            QMessageBox.warning(self, tr('Recording'), str(exc))
+
+    def screen_for(self, rect):
+        return QApplication.screenAt(rect.center()) or max(
+            QApplication.screens(), key=lambda s: s.geometry().intersected(rect).width()*s.geometry().intersected(rect).height())
+
+    def record_region(self, rect):
+        if hasattr(self, 'selector'):
+            self.selector.close()
+        screen = self.screen_for(rect)
+        # Each recording follows one monitor; keep the part on that monitor.
+        rect = rect.intersected(screen.geometry())
+        if rect.width() < 16 or rect.height() < 16:
+            self.cancel_recording()
+            self.statusBar().showMessage(tr('Select a larger area to record.'), 4000)
+            return
+        self.start_recording(('region', screen, rect), rect, screen, region=rect)
+
+    def record_window(self, target):
+        try:
+            source = capturable_window(target[0])
+            if source is not None:
+                screen = self.screen_for(target[1])
+                self.start_recording(('window', source), target[1], screen)
+            else:
+                # No native window source (e.g. macOS titles differ): record its area.
+                self.record_region(target[1])
+        except Exception as exc:
+            self.cancel_recording()
+            QMessageBox.warning(self, tr('Recording'), str(exc))
+
+    def start_recording(self, target, bounds, screen, region=None):
+        seconds = self.settings.recording['countdown']
+        if seconds:
+            if region is not None:
+                self.region_frame = RegionFrame(region)
+                self.region_frame.show_frame()
+            area = bounds.intersected(screen.geometry())
+            self.countdown = Countdown(seconds, screen.geometry() if area.isEmpty() else area)
+            self.countdown.finished.connect(lambda: self.begin_recording(target, screen, bounds, region))
+            self.countdown.cancelled.connect(self.cancel_recording)
+            self.countdown.start()
+        else:
+            self.begin_recording(target, screen, bounds, region)
+
+    def recording_poster(self, screen, bounds):
+        """One small frame for the workspace thumbnail, taken as recording starts."""
+        area = bounds.intersected(screen.geometry())
+        if area.isEmpty():
+            return None
+        origin = screen.geometry().topLeft()
+        pixmap = screen.grabWindow(0, area.x()-origin.x(), area.y()-origin.y(), area.width(), area.height())
+        if pixmap.isNull():
+            return None
+        return pixmap.toImage().scaled(240, 180, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+
+    def begin_recording(self, target, screen, bounds, region=None):
+        if self.countdown is not None:
+            self.countdown.deleteLater()
+            self.countdown = None
+        if self._quitting:
+            return
+        try:
+            temporary, final = self.history.recording_target()
+            self._recording_target = (self.history, final, self.recording_poster(screen, bounds))
+            self.recorder.start(target, self.settings.recording, temporary)
+        except Exception as exc:
+            self.cancel_recording()
+            QMessageBox.warning(self, tr('Recording'), str(exc))
+            return
+        self._capture_pending = False
+        if region is not None and self.region_frame is None:
+            self.region_frame = RegionFrame(region)
+            self.region_frame.show_frame()
+        bar = RecordingBar()
+        bar.stop_requested.connect(lambda: self.recorder.stop())
+        bar.discard_requested.connect(self.discard_recording)
+        bar.pause_requested.connect(self.recorder.toggle_pause)
+        bar.mute_toggled.connect(self.recorder.set_microphone_muted)
+        self.recorder.duration_changed.connect(bar.set_duration)
+        bar.set_microphone(self.recorder.has_microphone)
+        bar.set_state(self.recorder.state)
+        bar.place(screen.geometry(), region)
+        bar.show_bar()
+        self.recording_bar = bar
+
+    def discard_recording(self):
+        answer = QMessageBox.question(self.recording_bar, tr('Discard recording'), tr('Discard this recording? The video will not be saved.'),
+                                      QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                                      QMessageBox.StandardButton.Cancel)
+        if answer == QMessageBox.StandardButton.Discard:
+            self.recorder.stop(discard=True)
+
+    def cancel_recording(self):
+        if hasattr(self, 'selector'):
+            self.selector.close()
+        if self.countdown is not None:
+            self.countdown.deleteLater()
+            self.countdown = None
+        self.close_recording_overlays()
+        self._capture_pending = False
+        if self._restore_after_recording:
+            self.open_editor()
+
+    def close_recording_overlays(self):
+        for name in ('recording_bar', 'region_frame'):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.close()
+                widget.deleteLater()
+                setattr(self, name, None)
+
+    def recording_state_changed(self, state):
+        recording = self.recorder.active
+        self.record_action.setText(tr('Stop') if recording else tr('Record'))
+        self.record_action.setIconText(tr('Stop') if recording else tr('Record'))
+        self.record_action.setIcon(toolbar_icon('stop' if recording else 'record', TOKENS['danger']))
+        self.record_action.setToolTip(tr('Stop recording') if recording else tr('Record the screen'))
+        self.tray_record_menu.menuAction().setVisible(not recording)
+        self.tray_stop_action.setVisible(recording)
+        self.tray.setToolTip(tr('ScreenDepresso • Recording') if recording else 'ScreenDepresso')
+        if self.recording_bar is not None:
+            self.recording_bar.set_state(state)
+        if state == 'idle':
+            self.close_recording_overlays()
+
+    def recording_finished(self):
+        self._capture_pending = False
+        if self._restore_after_recording:
+            self.open_editor()
+
+    def recording_saved(self, path):
+        store, final, poster = self._recording_target
+        try:
+            path = str(store.add_video(path, final, poster))
+        except OSError as exc:
+            # Keep the finished video where it is rather than losing it.
+            self.recording_finished()
+            QMessageBox.warning(self, tr('Recording'), f'{exc}\n{path}')
+            return
+        self.last_recording = path
+        self.recording_finished()
+        self.workspace.refresh(select=path)
+        message = tr('Recording saved in the workspace: ')+Path(path).name
+        self.statusBar().showMessage(message, 8000)
+        if self.tray.isVisible() and QSystemTrayIcon.supportsMessages():
+            self.tray.showMessage(tr('Recording saved'), tr('Click to open the video.')+'\n'+Path(path).name,
+                                  QSystemTrayIcon.MessageIcon.Information, 6000)
+
+    def recording_failed(self, message):
+        self.recording_finished()
+        QMessageBox.warning(self, tr('Recording'), tr('Could not record the screen: ')+message)
 
     def paste(self):
         if not self.canvas.paste_image():

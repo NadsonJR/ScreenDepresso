@@ -44,7 +44,7 @@ def main():
         '--exclude-module', 'PySide6.QtQuick', str(ROOT/'packaging/entrypoint.py'))
     bundle = ROOT/'dist/screendepresso'
     notices = bundle/'licenses'
-    for name in ('PySide6', 'PySide6-Essentials', 'shiboken6', 'Pillow', 'Send2Trash', 'pyinstaller'):
+    for name in ('PySide6', 'PySide6-Essentials', 'PySide6-Addons', 'shiboken6', 'Pillow', 'Send2Trash', 'pyinstaller'):
         distribution = importlib.metadata.distribution(name)
         for entry in distribution.files or []:
             if any(word in str(entry).lower() for word in ('license','copying','copyright','notice')):
@@ -58,7 +58,7 @@ def main():
         notices.mkdir(exist_ok=True)
         shutil.copy2(python_license, notices/'Python-LICENSE.txt')
     (bundle/'THIRD_PARTY.txt').write_text(
-        'Includes Python, Qt/PySide6, Shiboken6, Pillow and Send2Trash. License notices are in licenses/.\n'
+        'Includes Python, Qt/PySide6 (including Qt Multimedia with FFmpeg, LGPL), Shiboken6, Pillow and Send2Trash. License notices are in licenses/.\n'
         'Qt libraries are dynamically linked. Qt sources and licensing: https://code.qt.io/ and https://www.qt.io/licensing/\n'
         'Application source: https://github.com/NadsonJR/ScreenDepresso\n', encoding='utf-8')
     compiler = shutil.which('ISCC.exe') or str(Path(os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'))/'Inno Setup 6/ISCC.exe')
