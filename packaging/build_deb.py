@@ -73,7 +73,7 @@ def main():
     if python_license.exists():
         shutil.copy2(python_license, docs / 'Python-LICENSE.txt')
     dependencies = ('libc6 (>= 2.39), libstdc++6, libgl1, libegl1, libglib2.0-0t64, '
-        'libgssapi-krb5-2, libfontconfig1, libdbus-1-3, libx11-6, libxext6, libxrender1, '
+        'libgssapi-krb5-2, libfontconfig1, libdbus-1-3, libpulse0, libx11-6, libxext6, libxrender1, '
         'libxkbcommon0, libxkbcommon-x11-0, libxcb1, libxcb-cursor0, libxcb-icccm4, '
         'libxcb-image0, libxcb-keysyms1, libxcb-render-util0, libxcb-xinerama0, '
         'libxcb-shape0, libxcb-randr0, libxcb-xfixes0, libxcb-sync1, libxcb-xkb1, '

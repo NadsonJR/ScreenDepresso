@@ -1,3 +1,15 @@
+## Novidades da versão 0.7.4
+
+- Gravação de um monitor, janela ou região em MP4, pelo botão **Gravar**, bandeja ou atalho configurável (padrão **Ctrl+Alt+R**).
+- Controles flutuantes para pausar/retomar, silenciar o microfone, parar e salvar ou descartar. Taxa de quadros, qualidade, contagem regressiva e microfone configuráveis.
+- H.264 quando há codificador disponível, com fallback para MPEG-4. Áudio opcional do microfone; áudio do sistema não é capturado.
+- Vídeos na workspace, com miniaturas, reprodução no player padrão e exclusão pela lixeira. O limite de imagens não exclui gravações.
+- Preferências antigas preservadas ao adicionar o atalho de gravação, inclusive quando há conflito. Descartar uma gravação restaura o editor. O macOS solicita consentimento antes de abrir o microfone.
+- Funções de desfoque e edição da 0.7.3 preservadas.
+- Instaladores verificados com codificação e decodificação de um MP4 sintético, além dos testes existentes. Captura real e diálogos de permissão requerem validação em sessão gráfica.
+
+Limitações: cada gravação acompanha um monitor; regiões que cruzam monitores são limitadas ao monitor escolhido. Janelas podem usar a captura de sua área como fallback. No Linux/X11, a barra aparece na gravação de tela inteira; quando uma região ocupa quase toda a tela, pode não haver espaço externo para os controles. A captura de tela do sistema e o microfone dependem das permissões e dispositivos disponíveis.
+
 ## Novidades da versão 0.7.3
 
 - Nova opção **Desfocar dentro da seleção**, disponível na seta do botão de desfoque e nos controles de edição. O modo padrão **Desfocar fora da seleção** continua disponível.

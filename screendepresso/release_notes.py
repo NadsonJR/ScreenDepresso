@@ -6,10 +6,10 @@ from .i18n import tr
 def installed_release_notes():
     return tr('What’s new in version {version}').format(version=__version__) + '\n\n' + '\n\n'.join(
         '• ' + text for text in (
-            tr('Choose Blur inside selection or Blur outside selection from the blur tool menu or contextual controls.'),
-            tr('Each blur area keeps its own direction. Change a selected effect, undo/redo it, or combine both directions in the same image.'),
-            tr('Large-image blur is prepared in the background and reused while moving clear regions. A lightweight preview is shown until the full-resolution layer is ready.'),
-            tr('Copy and save always use the original resolution and Gaussian filter, never the temporary preview. They may wait for the full layer to finish.'),
-            tr('The blur cache is shared across tabs and limited in memory. Transparency, overlapping clear areas, undo/redo and legacy compositing are preserved.'),
+            tr('Screen recording: capture a monitor, window or region as MP4. Start or stop with the Record button, tray menu or recording hotkey.'),
+            tr('Pause, resume, mute the microphone, save or discard with the floating recording controls. Configure frame rate, quality, countdown and microphone in Settings.'),
+            tr('Recordings appear in the workspace with thumbnails and open in your video player. The workspace image limit does not delete videos.'),
+            tr('Existing capture shortcuts and preferences are preserved. Discarding restores the editor, and microphone permission is requested when needed on macOS.'),
+            tr('Inside/outside blur and the large-image blur cache remain available.'),
         )
     )

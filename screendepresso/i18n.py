@@ -81,6 +81,11 @@ CATALOG = {
 }
 CATALOG.update({'Capture full screen': 'Capturar tela inteira', 'Capture window': 'Capturar janela', 'Capture region': 'Capturar região', 'Unsupported language': 'Idioma não suportado'})
 CATALOG.update({
+ 'Screen recording: capture a monitor, window or region as MP4. Start or stop with the Record button, tray menu or recording hotkey.': 'Gravação de tela: capture um monitor, janela ou região em MP4. Inicie ou pare pelo botão Gravar, menu da bandeja ou atalho de gravação.',
+ 'Pause, resume, mute the microphone, save or discard with the floating recording controls. Configure frame rate, quality, countdown and microphone in Settings.': 'Pause, retome, silencie o microfone, salve ou descarte pelos controles flutuantes de gravação. Configure taxa de quadros, qualidade, contagem regressiva e microfone nas Configurações.',
+ 'Recordings appear in the workspace with thumbnails and open in your video player. The workspace image limit does not delete videos.': 'As gravações aparecem na workspace com miniaturas e abrem no seu reprodutor de vídeo. O limite de imagens da workspace não exclui vídeos.',
+ 'Existing capture shortcuts and preferences are preserved. Discarding restores the editor, and microphone permission is requested when needed on macOS.': 'Os atalhos de captura e as preferências existentes são preservados. Descartar restaura o editor, e a permissão de microfone é solicitada quando necessário no macOS.',
+ 'Inside/outside blur and the large-image blur cache remain available.': 'O desfoque dentro/fora da seleção e o cache para imagens grandes continuam disponíveis.',
  'Blur strength (1–100)': 'Intensidade do desfoque (1–100)',
  'Click a capture to open it in the editor.': 'Clique em uma captura para abri-la no editor.',
  'Arrow color…': 'Cor da seta…',

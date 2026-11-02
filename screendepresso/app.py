@@ -1476,6 +1476,9 @@ def run_application(app, instance):
         if local.pixel(302, 200) != large.pixel(302, 200) or local.pixel(285, 200) == large.pixel(285, 200):
             raise RuntimeError('Inside blur changed pixels outside its area or did not blur inside')
         probe.deleteLater()
+        from .smoke import verify_video_bundle
+        with tempfile.TemporaryDirectory(prefix='.video-smoke-', dir=window.history.directory) as temporary:
+            print(verify_video_bundle(temporary), flush=True)
         print('Interface, tabs, balloons, text, zoom, workspace and clipboard: OK (offscreen)', flush=True)
         QTimer.singleShot(100, window.request_quit)
     sys.exit(app.exec())
