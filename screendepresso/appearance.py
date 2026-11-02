@@ -94,6 +94,18 @@ def _icon_pixmap(symbol, color, plate, scale, size):
             p.drawRoundedRect(QRectF(7, 8, 34, 32), 3, 3)
             p.drawEllipse(QRectF(29, 14, 5, 5))
             p.drawPolyline([QPointF(9, 35), QPointF(19, 24), QPointF(27, 31), QPointF(32, 26), QPointF(39, 35)])
+    elif symbol == 'record':
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QRectF(10, 10, 28, 28))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(ink))
+        p.drawEllipse(QRectF(17, 17, 14, 14))
+    elif symbol == 'stop':
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QRectF(10, 10, 28, 28))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(ink))
+        p.drawRoundedRect(QRectF(18, 18, 12, 12), 2, 2)
     elif symbol == 'refresh':
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawArc(QRectF(11, 11, 26, 26), 40*16, 285*16)

@@ -284,8 +284,42 @@ def native_help(source):
     return text
 
 
+CATALOG.update({
+ 'Record': 'Gravar', 'Stop': 'Parar', 'Record the screen': 'Gravar a tela', 'Record screen': 'Gravar tela',
+ 'Stop recording': 'Parar gravação', 'Record full screen': 'Gravar tela inteira',
+ 'Records the monitor under the mouse pointer.': 'Grava o monitor onde está o ponteiro do mouse.',
+ 'Record window…': 'Gravar janela…', 'Record window': 'Gravar janela', 'Record region…': 'Gravar região…',
+ 'Record microphone audio': 'Gravar áudio do microfone', 'Play video': 'Reproduzir vídeo', 'Open the recording in the default video player': 'Abrir a gravação no player de vídeo padrão',
+ 'Recordings: {count}': 'Gravações: {count}', 'Recordings cannot be duplicated in the workspace.': 'Gravações não podem ser duplicadas na workspace.',
+ 'Could not save the recording in the workspace.': 'Não foi possível salvar a gravação na workspace.',
+ 'Double-click to open an image or play a recording. Drag a thumbnail onto the editor to add it as an editable image.':
+ 'Clique duas vezes para abrir uma imagem ou reproduzir uma gravação. Arraste uma miniatura para o editor para adicioná-la como imagem editável.',
+ 'Recording saved in the workspace: ': 'Gravação salva na workspace: ',
+ 'Open last recording': 'Abrir última gravação', 'Start / stop with {shortcut}': 'Iniciar / parar com {shortcut}',
+ 'Start / stop recording': 'Iniciar / parar gravação',
+ 'Discard recording': 'Descartar gravação',
+ 'Discard this recording? The video will not be saved.': 'Descartar esta gravação? O vídeo não será salvo.',
+ 'Recording': 'Gravação', 'Recording saved': 'Gravação salva', 'Could not open this recording.': 'Não foi possível abrir esta gravação.',
+ 'Click to open the video.': 'Clique para abrir o vídeo.',
+ 'Could not record the screen: ': 'Não foi possível gravar a tela: ',
+ 'Select a larger area to record.': 'Selecione uma área maior para gravar.',
+ 'ScreenDepresso • Recording': 'ScreenDepresso • Gravando',
+ 'Recording failed.': 'A gravação falhou.', 'A recording is already in progress.': 'Já existe uma gravação em andamento.',
+ 'Pause recording': 'Pausar gravação', 'Resume recording': 'Retomar gravação', 'Stop and save': 'Parar e salvar',
+ 'Mute microphone': 'Silenciar microfone', 'Unmute microphone': 'Ativar microfone',
+ 'Click or press Esc to cancel': 'Clique ou pressione Esc para cancelar', 'Esc cancels': 'Esc cancela',
+ 'Frames per second:': 'Quadros por segundo:',
+ 'Video quality:': 'Qualidade do vídeo:', 'Countdown before recording:': 'Contagem antes de gravar:',
+ 'Microphone access is not allowed. Allow ScreenDepresso in System Settings → Privacy & Security → Microphone. This recording will not include audio.': 'O acesso ao microfone não está permitido. Permita o ScreenDepresso em Ajustes do Sistema → Privacidade e Segurança → Microfone. Esta gravação não terá áudio.', 'Microphone:': 'Microfone:', 'System default': 'Padrão do sistema', 'Off': 'Desativada',
+ '{seconds} seconds': '{seconds} segundos',
+ 'Low (smaller files)': 'Baixa (arquivos menores)', 'Normal': 'Normal', 'High': 'Alta', 'Very high': 'Muito alta',
+ "Recordings are saved in the workspace as MP4: H.264 when the system provides an encoder, otherwise MPEG-4. Lower frame rates and quality use less CPU and disk.":
+ 'As gravações são salvas na workspace em MP4: H.264 quando o sistema oferece um codificador; caso contrário, MPEG-4. Taxas de quadros e qualidade menores usam menos CPU e disco.',
+})
+
+
 def mode_label(mode):
-    return tr({'tela': 'Full screen', 'janela': 'Window', 'região': 'Region'}[mode])
+    return tr({'tela': 'Full screen', 'janela': 'Window', 'região': 'Region', 'gravação': 'Start / stop recording'}[mode])
 
 
 def format_number(value, decimals=1):

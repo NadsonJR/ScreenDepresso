@@ -51,11 +51,13 @@ def main():
         info = plistlib.load(stream)
     info.update(CFBundleShortVersionString=__version__, CFBundleVersion=__version__,
                 LSMinimumSystemVersion='15.0', NSHighResolutionCapable=True,
-                NSScreenCaptureUsageDescription='ScreenDepresso captures screenshots only when you request them.')
+                NSScreenCaptureUsageDescription='ScreenDepresso captures screenshots and recordings only when you request them.',
+                # Required before Qt opens the microphone; macOS terminates the app without it.
+                NSMicrophoneUsageDescription='ScreenDepresso records microphone audio only when you enable it for a screen recording.')
     with info_path.open('wb') as stream:
         plistlib.dump(info, stream)
     notices = app/'Contents/Resources/licenses'
-    for name in ('PySide6', 'PySide6-Essentials', 'shiboken6', 'Pillow', 'Send2Trash',
+    for name in ('PySide6', 'PySide6-Essentials', 'PySide6-Addons', 'shiboken6', 'Pillow', 'Send2Trash',
                  'pyinstaller', 'pyobjc-core', 'pyobjc-framework-Quartz', 'pyobjc-framework-Cocoa'):
         distribution = importlib.metadata.distribution(name)
         for entry in distribution.files or []:
