@@ -57,6 +57,23 @@ def microphones():
     return [(device.description(), device_key(device)) for device in QMediaDevices.audioInputs()]
 
 
+def microphone_permission():
+    """'granted', 'denied' or 'undetermined'. Only macOS gates the microphone;
+    opening it there without consent records silence or ends the app."""
+    import sys
+    if sys.platform != 'darwin':
+        return 'granted'
+    from PySide6.QtCore import QCoreApplication, QMicrophonePermission, Qt
+    status = QCoreApplication.instance().checkPermission(QMicrophonePermission())
+    return {Qt.PermissionStatus.Granted: 'granted', Qt.PermissionStatus.Denied: 'denied'}.get(status, 'undetermined')
+
+
+def request_microphone_permission(context, callback):
+    """Show the system prompt once; callback receives the resulting status."""
+    from PySide6.QtCore import QCoreApplication, QMicrophonePermission
+    QCoreApplication.instance().requestPermission(QMicrophonePermission(), context, lambda permission: callback(microphone_permission()))
+
+
 def device_key(device):
     return bytes(device.id()).decode('utf-8', errors='replace')
 
@@ -99,6 +116,7 @@ class ScreenRecorder(QObject):
     duration_changed = Signal(int)
     saved = Signal(str)
     failed = Signal(str)
+    discarded = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -171,7 +189,7 @@ class ScreenRecorder(QObject):
         source.errorOccurred.connect(lambda error, message: self._fail(message))
         self._objects.append(source)
         self._audio = None
-        if options['microphone']:
+        if options['microphone'] and microphone_permission() == 'granted':
             devices = QMediaDevices.audioInputs()
             device = next((d for d in devices if device_key(d) == options['microphone_device']), None)
             device = device or QMediaDevices.defaultAudioInput()
@@ -314,9 +332,11 @@ class ScreenRecorder(QObject):
             remove_later(path, 0)
         if error:
             self.failed.emit(error)
-        elif not discard and path is not None and path.exists():
+        elif discard:
+            self.discarded.emit()
+        elif path is not None and path.exists():
             self.saved.emit(str(path))
-        elif not discard:
+        else:
             self.failed.emit(tr('Recording failed.'))
 
     def _set_state(self, state):

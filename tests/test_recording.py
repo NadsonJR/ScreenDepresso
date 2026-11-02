@@ -69,6 +69,18 @@ def test_legacy_settings_gain_recording_hotkey_and_keep_capture_keys(tmp_path):
     assert settings.recording == default_recording()
 
 
+def test_legacy_recording_hotkey_avoids_existing_shortcut_and_keeps_preferences(tmp_path):
+    path = tmp_path/'settings.json'
+    legacy = {'tela': 'Ctrl+Alt+R', 'janela': 'Ctrl+Shift+2', 'região': 'Ctrl+Shift+3'}
+    path.write_text(json.dumps({'directory': str(tmp_path/'captures'), 'hotkeys': legacy,
+                                'language': 'pt_BR', 'workspace_limit': 50}), encoding='utf-8')
+    settings = Settings(path)
+    assert settings.directory == str(tmp_path/'captures')
+    assert settings.language == 'pt_BR' and settings.workspace_limit == 50
+    assert {k: settings.hotkeys[k] for k in legacy} == legacy
+    assert settings.hotkeys['gravação'] not in legacy.values()
+
+
 def test_recording_settings_roundtrip(tmp_path):
     path = tmp_path/'settings.json'
     settings = Settings(path)
@@ -170,3 +182,49 @@ def test_h264_failure_before_any_frame_restarts_with_mpeg4(tmp_path, monkeypatch
     recorder._recorder = Encoder()
     recorder._fail('Disk full')
     assert failures == ['Disk full'] and len(calls) == 1
+
+
+def test_discarded_recording_restores_the_editor(tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path/'config'))
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path/'data'))
+    from screendepresso.app import MainWindow
+    window = MainWindow()
+    try:
+        opened, failures = [], []
+        monkeypatch.setattr(window, 'open_editor', lambda: opened.append(True))
+        window.recorder.failed.connect(failures.append)
+        window._restore_after_recording = window._capture_pending = True
+        window.recorder.state, window.recorder._discard = 'stopping', True
+        window.recorder.path = tmp_path/'clip.mp4'
+        window.recorder._finish()
+        assert opened == [True] and failures == [] and not window._capture_pending
+    finally:
+        window.close()
+
+
+def test_macos_microphone_permission_is_settled_before_recording(tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path/'config'))
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path/'data'))
+    from PySide6.QtWidgets import QMessageBox
+    import screendepresso.app as module
+    window = module.MainWindow()
+    try:
+        window.settings.recording['microphone'] = True
+        requests, warnings, prepared = [], [], []
+        monkeypatch.setattr(module, 'microphone_permission', lambda: 'undetermined')
+        monkeypatch.setattr(module, 'request_microphone_permission', lambda context, callback: requests.append(callback))
+        monkeypatch.setattr(QMessageBox, 'warning', lambda *args: warnings.append(args[2]))
+        monkeypatch.setattr(window, 'prepare_recording', lambda mode, screen_name=None: prepared.append(mode))
+        # A pending permission asks first and does not hide the editor yet.
+        window.record('tela')
+        assert len(requests) == 1 and window._capture_pending and not warnings
+        # A denial is explained once, then the video is recorded without audio.
+        requests[0]('denied')
+        assert len(warnings) == 1 and window._capture_pending and len(requests) == 1
+        window._capture_pending = False
+        monkeypatch.setattr(module, 'microphone_permission', lambda: 'granted')
+        window.record('tela')
+        assert len(requests) == 1 and len(warnings) == 1 and window._capture_pending
+    finally:
+        window._capture_pending = False
+        window.close()

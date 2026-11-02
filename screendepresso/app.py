@@ -17,7 +17,7 @@ from .hotkeys import Hotkeys
 from .platform_support import capture_desktop, crop_desktop, global_hotkeys_available
 from .capture_ui import Selector, WindowPicker
 from .update_panel import UpdatePanel
-from .recorder import ScreenRecorder, capturable_window
+from .recorder import ScreenRecorder, capturable_window, microphone_permission, request_microphone_permission
 from .recording_ui import Countdown, RecordingBar, RegionFrame
 from .workspace import WorkspaceStore as History, WorkspaceView, read_image, is_video
 
@@ -304,6 +304,7 @@ class MainWindow(QMainWindow):
         self.recorder.state_changed.connect(self.recording_state_changed)
         self.recorder.saved.connect(self.recording_saved)
         self.recorder.failed.connect(self.recording_failed)
+        self.recorder.discarded.connect(self.recording_finished)
         self.recording_bar = None
         self.region_frame = None
         self.countdown = None
@@ -1056,7 +1057,7 @@ class MainWindow(QMainWindow):
         else:
             self.record('tela')
 
-    def record(self, mode, screen_name=None):
+    def record(self, mode, screen_name=None, microphone_checked=False):
         if self._quitting or self._capture_pending or self.recorder.active:
             return
         if sys.platform == 'darwin':
@@ -1066,6 +1067,8 @@ class MainWindow(QMainWindow):
             except RuntimeError as exc:
                 QMessageBox.warning(self, tr('Recording'), str(exc))
                 return
+        if not microphone_checked and not self.microphone_ready(lambda: self.record(mode, screen_name, True)):
+            return
         self.canvas.finish_text()
         self._capture_pending = True
         self._restore_after_recording = self.isVisible() and not self.isMinimized()
@@ -1073,6 +1076,30 @@ class MainWindow(QMainWindow):
             self._settings_dialog.hide()
         self.hide()
         QTimer.singleShot(350, lambda: self.prepare_recording(mode, screen_name))
+
+    def microphone_ready(self, retry):
+        """Settle macOS microphone consent before the screen is hidden.
+
+        An undetermined permission shows the system prompt and calls retry
+        once answered; a denied one records video without audio."""
+        if not self.settings.recording['microphone']:
+            return True
+        status = microphone_permission()
+        if status == 'undetermined':
+            self._capture_pending = True
+
+            def answered(status):
+                self._capture_pending = False
+                self.warn_microphone(status)
+                retry()
+            request_microphone_permission(self, answered)
+            return False
+        self.warn_microphone(status)
+        return True
+
+    def warn_microphone(self, status):
+        if status != 'granted':
+            QMessageBox.warning(self, tr('Recording'), tr('Microphone access is not allowed. Allow ScreenDepresso in System Settings → Privacy & Security → Microphone. This recording will not include audio.'))
 
     def prepare_recording(self, mode, screen_name=None):
         if self._quitting:

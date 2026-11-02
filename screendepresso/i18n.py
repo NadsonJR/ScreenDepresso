@@ -305,7 +305,7 @@ CATALOG.update({
  'Click or press Esc to cancel': 'Clique ou pressione Esc para cancelar', 'Esc cancels': 'Esc cancela',
  'Frames per second:': 'Quadros por segundo:',
  'Video quality:': 'Qualidade do vídeo:', 'Countdown before recording:': 'Contagem antes de gravar:',
- 'Microphone:': 'Microfone:', 'System default': 'Padrão do sistema', 'Off': 'Desativada',
+ 'Microphone access is not allowed. Allow ScreenDepresso in System Settings → Privacy & Security → Microphone. This recording will not include audio.': 'O acesso ao microfone não está permitido. Permita o ScreenDepresso em Ajustes do Sistema → Privacidade e Segurança → Microfone. Esta gravação não terá áudio.', 'Microphone:': 'Microfone:', 'System default': 'Padrão do sistema', 'Off': 'Desativada',
  '{seconds} seconds': '{seconds} segundos',
  'Low (smaller files)': 'Baixa (arquivos menores)', 'Normal': 'Normal', 'High': 'Alta', 'Very high': 'Muito alta',
  "Recordings are saved in the workspace as MP4: H.264 when the system provides an encoder, otherwise MPEG-4. Lower frame rates and quality use less CPU and disk.":

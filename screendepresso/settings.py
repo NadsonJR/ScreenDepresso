@@ -26,6 +26,21 @@ def parse_hotkey(value):
         raise ValueError(tr('Choose a letter, number, F1–F35, Print or a navigation key.'))
     return (tuple(sorted(modifiers)), keysym)
 
+
+RECORDING_HOTKEYS = ('Ctrl+Alt+R', 'Ctrl+Shift+R', 'Ctrl+Alt+Shift+R', 'Ctrl+Alt+F9', 'Ctrl+Alt+Shift+F9')
+
+
+def recording_hotkey(used):
+    """Pick the recording hotkey for older settings without clashing with the
+    capture keys already chosen there."""
+    taken = set()
+    for value in used:
+        try:
+            taken.add(parse_hotkey(value))
+        except (ValueError, AttributeError):
+            pass
+    return next((value for value in RECORDING_HOTKEYS if parse_hotkey(value) not in taken), RECORDING_HOTKEYS[0])
+
 class Settings:
 
     def __init__(self, path=None):
@@ -48,7 +63,7 @@ class Settings:
             self.recording = normalize_recording(data.get('recording'))
             if isinstance(shortcuts, dict) and 'gravação' not in shortcuts:
                 # Settings written before screen recording: keep the capture keys.
-                shortcuts = dict(shortcuts, gravação=DEFAULT_HOTKEYS['gravação'])
+                shortcuts = dict(shortcuts, gravação=recording_hotkey(shortcuts.values()))
             if set(shortcuts) != set(DEFAULT_HOTKEYS) or len({parse_hotkey(v) for v in shortcuts.values()}) != len(DEFAULT_HOTKEYS):
                 raise ValueError(tr('Invalid hotkeys'))
             if not isinstance(data['directory'], str) or not Path(data['directory']).is_absolute():
