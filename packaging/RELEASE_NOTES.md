@@ -1,3 +1,12 @@
+## Novidades da versão 0.7.3
+
+- Nova opção **Desfocar dentro da seleção**, disponível na seta do botão de desfoque e nos controles de edição. O modo padrão **Desfocar fora da seleção** continua disponível.
+- Cada área mantém sua direção: use Selecionar/mover para selecionar um efeito e alternar dentro/fora. A escolha também define a direção dos próximos efeitos desenhados.
+- Compatível com intensidade ajustável, desfazer/refazer, recorte, abas, copiar e salvar em resolução original.
+- Na camada única, áreas internas de desfoque somam-se ao fundo desfocado; se houver sobreposição, a região marcada para desfocar por dentro prevalece. Sobreposições não acumulam intensidade.
+- Cache e cálculo em segundo plano da 0.7.2 preservados, inclusive ao alternar a direção. No modo sequencial, a ordem dos efeitos continua sendo respeitada.
+- Interface e notas de atualização em inglês e português brasileiro.
+
 ## Novidades da versão 0.7.2
 
 - Corrigido o gargalo que recalculava o desfoque da imagem inteira a cada repintura, movimento ou redimensionamento de uma área nítida.

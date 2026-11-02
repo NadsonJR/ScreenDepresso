@@ -39,14 +39,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Esses testes verificam anotações, recorte, desfoque, desfazer e persistência do histórico. Captura real, atalhos e área de transferência precisam também de teste manual em GNOME/X11: abra outra janela, teste as três capturas, edite, copie para outro aplicativo, exporte e reabra a imagem.
 
-## Instalador e atualizações (v0.7.2)
+## Instalador e atualizações (v0.7.3)
 
 O pacote `.deb` é destinado a **Ubuntu 24.04+ x86_64, em X11**. Inclui o runtime Python e bibliotecas Python: não é necessário instalar ferramentas de desenvolvimento ou compilar a aplicação.
 
 As versões publicadas ficam em [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Depois de baixar o pacote:
 
 ```bash
-sudo apt install ./screendepresso_0.7.2_amd64.deb
+sudo apt install ./screendepresso_0.7.3_amd64.deb
 ```
 
 Abra **ScreenDepresso** no menu de aplicativos. Para atualizar, use **Settings → Updates → Check for updates → Download and install**. Todo o fluxo acontece na própria aba, com a opção de manter a versão atual. A consulta e o download ocorrem em segundo plano; o pacote é verificado pelo tamanho e SHA-256 do manifesto da release e instalado pelo `apt`, com autorização via Polkit. Salve suas edições e use **Restart application** ao concluir a atualização. O histórico permanece no diretório de dados do usuário. Cancelar a autorização não instala a nova versão.
@@ -59,7 +59,7 @@ O workflow também executa o build automaticamente em pushes relevantes na `main
 
 1. Atualize `__version__` em `screendepresso/__init__.py` e execute `uv lock`.
 2. Faça commit e push das mudanças.
-3. Crie e envie uma tag correspondente, por exemplo `git tag v0.7.2` e `git push origin v0.7.2`.
+3. Crie e envie uma tag correspondente, por exemplo `git tag v0.7.3` e `git push origin v0.7.3`.
 4. O workflow **Build installers** executa os testes, constrói o `.deb` no Ubuntu 24.04, instala e testa o executável empacotado, e publica a release com `.deb`, `SHA256SUMS` e `update.json`. A publicação só ocorre após os checks passarem.
 
 Código, instaladores e metadados de atualização ficam no próprio repositório público `NadsonJR/ScreenDepresso`.
@@ -152,7 +152,7 @@ A mesma aplicação agora possui backend Windows para capturar tela inteira, jan
 
 ### Instalar no Windows
 
-Baixe `screendepresso_0.7.2_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
+Baixe `screendepresso_0.7.3_windows_amd64_setup.exe` nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases). Execute o instalador e abra ScreenDepresso no menu Iniciar. Requer Windows 10 (build 19041 ou posterior) ou Windows 11, de 64 bits. Não é necessário instalar Python ou ferramentas de build.
 
 A instalação é por usuário em `%LOCALAPPDATA%\Programs\ScreenDepresso`; capturas ficam por padrão em `%LOCALAPPDATA%\ScreenDepresso\captures` e as preferências em `%LOCALAPPDATA%\ScreenDepresso\settings.json`. O desinstalador preserva capturas e preferências. As variáveis XDG de testes continuam podendo sobrescrever esses diretórios.
 
@@ -296,3 +296,9 @@ Enquanto o cálculo termina, uma prévia temporária de até 262 mil pixels mant
 O cache é compartilhado entre abas, com orçamento de 256 MiB; uma camada individual maior pode ocupar o cache sozinha. Assim ele não cresce a cada região ou valor de intensidade. Mudanças na imagem, recorte, intensidade e desfazer/refazer invalidam ou reutilizam a camada correta. O modo **Sequential blur (legacy)** mantém sua ordem original de composição e reutiliza o prefixo anterior à última camada; sequências longas ainda podem precisar de cálculos adicionais ao alterar objetos anteriores.
 
 Veja [a investigação e os benchmarks reproduzíveis](docs/BLUR_PERFORMANCE.md). Os valores medem o renderizador em memória num ambiente Linux, não o FPS completo do aplicativo nem gravação de arquivos. Builds e testes funcionais também são executados no Windows e nas duas arquiteturas macOS.
+
+## Desfocar dentro ou fora da seleção (0.7.3)
+
+Abra a seta do botão **Blur** e escolha **Blur inside selection** para desfocar somente a área desenhada, ou **Blur outside selection** para manter a área nítida e desfocar o restante. A direção também está nos controles de edição acima da imagem. A intensidade funciona nos dois modos.
+
+Use **Select / move** para selecionar uma área existente e alterar sua direção; a escolha vale também para as próximas áreas desenhadas. As áreas permanecem editáveis, com desfazer/refazer, e cada aba mantém sua escolha. Na camada única, as regiões de desfoque interno se somam ao fundo desfocado e prevalecem sobre áreas nítidas sobrepostas, sem aumentar a intensidade na interseção. O modo sequencial mantém a ordem de composição. Copiar e salvar sempre usam a resolução original.
