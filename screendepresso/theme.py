@@ -27,6 +27,8 @@ QToolButton:checked { background: @accent_active; color: white; border-color: @a
 QToolButton:focus, QPushButton:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QFontComboBox:focus, QKeySequenceEdit:focus, QTextBrowser:focus { border: 1px solid @accent; }
 QToolButton:disabled, QPushButton:disabled { color: @secondary; background: @surface; }
 QToolButton::menu-button { border-left: 1px solid @border; width: 16px; }
+QToolBar#ribbon QToolButton { padding: 4px 8px 12px 8px; }
+QToolBar#ribbon QToolButton::menu-button { subcontrol-origin: border; subcontrol-position: bottom center; border-left: 0; border-top: 1px solid @border; width: 100%; height: 12px; }
 QScrollArea, QScrollArea > QWidget > QWidget { background: @canvas; border: 0; }
 QScrollArea#contextBar { background: @surface; border-bottom: 1px solid @border; }
 QDockWidget { color: @text; }
