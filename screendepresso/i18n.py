@@ -81,6 +81,9 @@ CATALOG = {
 }
 CATALOG.update({'Capture full screen': 'Capturar tela inteira', 'Capture window': 'Capturar janela', 'Capture region': 'Capturar região', 'Unsupported language': 'Idioma não suportado'})
 CATALOG.update({
+ 'Top toolbar menus now open from the lower strip, with more space between icons, labels and menu arrows.': 'Os menus da barra superior agora abrem pela faixa inferior, com mais espaço entre ícones, textos e setas de menu.',
+ 'The menu strip follows each button’s actual width in compact and expanded layouts, English and Brazilian Portuguese.': 'A faixa do menu acompanha a largura real de cada botão nos layouts compacto e expandido, em inglês e português brasileiro.',
+ 'Click the icon to run the main action, or the lower arrow to open its options. Capture, recording and editing commands are unchanged.': 'Clique no ícone para executar a ação principal ou na seta inferior para abrir suas opções. Os comandos de captura, gravação e edição permanecem iguais.',
  'Screen recording: capture a monitor, window or region as MP4. Start or stop with the Record button, tray menu or recording hotkey.': 'Gravação de tela: capture um monitor, janela ou região em MP4. Inicie ou pare pelo botão Gravar, menu da bandeja ou atalho de gravação.',
  'Pause, resume, mute the microphone, save or discard with the floating recording controls. Configure frame rate, quality, countdown and microphone in Settings.': 'Pause, retome, silencie o microfone, salve ou descarte pelos controles flutuantes de gravação. Configure taxa de quadros, qualidade, contagem regressiva e microfone nas Configurações.',
  'Recordings appear in the workspace with thumbnails and open in your video player. The workspace image limit does not delete videos.': 'As gravações aparecem na workspace com miniaturas e abrem no seu reprodutor de vídeo. O limite de imagens da workspace não exclui vídeos.',

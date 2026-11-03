@@ -2,7 +2,7 @@ from .i18n import tr, mode_label, set_language, translate_tree, native_help
 import os
 import sys
 from pathlib import Path
-from PySide6.QtCore import Qt, QRect, QTimer, QSize, QUrl
+from PySide6.QtCore import Qt, QRect, QTimer, QSize, QUrl, QEvent
 from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont, QFontDatabase, QCursor, QDesktopServices
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
@@ -268,6 +268,9 @@ class MainWindow(QMainWindow):
                 if isinstance(button, QToolButton):
                     button.setFont(self.font())
                     button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+                    if bar is ribbon and button.menu() is not None:
+                        button.setProperty('ribbonMenu', True)
+                        button.installEventFilter(self)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
         zoom_panel = QWidget()
         zoom_layout = QHBoxLayout(zoom_panel)
@@ -432,6 +435,15 @@ class MainWindow(QMainWindow):
     def update_editor_controls(self, callback, *args):
         callback(*args)
         self.context_bar.refresh()
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.Resize and watched.property('ribbonMenu'):
+            # Qt style sheets treat percentage widths as fixed pixel values.
+            # Use the real logical width, including after locale/style changes.
+            style = f'QToolButton::menu-button {{ width: {event.size().width()}px; }}'
+            if watched.styleSheet() != style:
+                watched.setStyleSheet(style)
+        return super().eventFilter(watched, event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
