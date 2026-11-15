@@ -2,9 +2,10 @@ import os
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
 import pytest
-from PySide6.QtCore import Qt, QPointF, QMimeData, QUrl
+from PySide6.QtCore import Qt, QPointF, QPoint, QMimeData, QUrl, QTimer
 from PySide6.QtGui import QColor, QImage
-from PySide6.QtWidgets import QApplication, QFileDialog
+from PySide6.QtWidgets import QApplication, QFileDialog, QStyle, QStyleOptionToolButton
+from PySide6.QtTest import QTest
 from screendepresso.app import MainWindow
 from screendepresso.i18n import set_language, CATALOG
 from screendepresso.presentation import TOOL_NAMES
@@ -158,3 +159,60 @@ def test_action_feedback_is_visible_beside_zoom_and_restores_context(window):
     assert 'Imagem copiada.' in window.tool_hint.text()
     window.statusBar().clearMessage()
     assert window.tool_hint.text().startswith('Seta')
+
+
+@pytest.mark.parametrize('width', [820, 1280])
+@pytest.mark.parametrize('language', ['en', 'pt_BR'])
+def test_ribbon_menu_strip_follows_button_width_and_recording_label(window, width, language):
+    window.resize(width, 800)
+    set_language(language)
+    app.processEvents()
+    for action in window.ribbon.actions():
+        button = window.ribbon.widgetForAction(action)
+        if button is None or not hasattr(button, 'menu') or button.menu() is None:
+            continue
+        for button_width in (70, 180):
+            button.setFixedWidth(button_width)
+            app.processEvents()
+            option = QStyleOptionToolButton()
+            button.initStyleOption(option)
+            strip = button.style().subControlRect(QStyle.ComplexControl.CC_ToolButton, option,
+                                                  QStyle.SubControl.SC_ToolButtonMenu, button)
+            assert strip.left() == 0 and strip.width() == button.width()
+            assert strip.bottom() == button.height()-1
+            assert not strip.contains(QPoint(button.width()//2, 10))
+        button.setMinimumWidth(0)
+        button.setMaximumWidth(16777215)
+    window.recorder.state = 'recording'
+    try:
+        window.recording_state_changed('recording')
+        app.processEvents()
+        button = window.record_button
+        option = QStyleOptionToolButton(); button.initStyleOption(option)
+        strip = button.style().subControlRect(QStyle.ComplexControl.CC_ToolButton, option,
+                                              QStyle.SubControl.SC_ToolButtonMenu, button)
+        assert strip.left() == 0 and strip.width() == button.width()
+    finally:
+        window.recorder.state = 'idle'
+        window.recording_state_changed('idle')
+
+
+@pytest.mark.parametrize('width', [820, 1280])
+@pytest.mark.parametrize('language', ['en', 'pt_BR'])
+def test_ribbon_icon_captures_and_lower_strip_opens_options(window, monkeypatch, width, language):
+    window.resize(width, 800)
+    set_language(language)
+    app.processEvents()
+    button = next(window.ribbon.widgetForAction(action) for action in window.ribbon.actions()
+                  if window.ribbon.widgetForAction(action) is not None
+                  and getattr(window.ribbon.widgetForAction(action), 'menu', lambda: None)() is window.monitor_menu)
+    events = []
+    monkeypatch.setattr(window, 'capture', lambda mode: events.append(mode))
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton, pos=QPoint(button.width()//2, 10))
+    assert events == ['tela']
+    def opened():
+        events.append('menu')
+        QTimer.singleShot(0, window.monitor_menu.close)
+    window.monitor_menu.aboutToShow.connect(opened)
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton, pos=QPoint(button.width()//2, button.height()-5))
+    assert events == ['tela', 'menu']

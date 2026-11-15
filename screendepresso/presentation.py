@@ -145,6 +145,8 @@ class ContextBar(QScrollArea):
         self.field('balao', 'Outline', self.outline)
         self.marker_style = self.combo('numero', 'Style', MARKER_STYLES, owner.choose_marker_style)
         self.blur_strength = self.spin('desfoque', 'Blur strength:', 1, 100, lambda value: owner.canvas.set_blur_radius(value))
+        self.blur_area = self.combo('desfoque', 'Blur area', {False:'Blur outside selection', True:'Blur inside selection'},
+                                    lambda value: owner.canvas.set_blur_inside(value))
         self.blur_mode = self.combo('desfoque', 'Mode', {'shared':'Shared blur layer', 'sequential':'Sequential blur (legacy)'}, lambda value: owner.canvas.set_blur_mode(value))
         self.hints = []
         for kind, text in [('selecionar', 'Select an object to edit its properties.'),
@@ -241,6 +243,7 @@ class ContextBar(QScrollArea):
         self.set_value(self.marker_style, self.owner.current_marker_style())
         self.set_value(self.blur_strength, selected['radius'] if selected and selected['kind'] == 'desfoque' else canvas.blur_radius)
         self.set_value(self.blur_mode, canvas.blur_mode)
+        self.set_value(self.blur_area, selected.get('inside', False) if selected and selected['kind'] == 'desfoque' else canvas.blur_inside)
         colors = {'seta': canvas.arrow_color, 'retângulo': canvas.rectangle_color,
                   'texto': text['color'], 'balao': bubble['fill'], 'numero': canvas.marker_color}
         if selected and selected['kind'] in ('seta', 'retângulo'):

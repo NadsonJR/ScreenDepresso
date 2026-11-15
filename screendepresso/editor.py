@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QSize, QSignalBlo
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QFont, QFontMetrics, QLinearGradient, QRegion
 from PySide6.QtWidgets import QWidget, QPlainTextEdit, QApplication
 from .annotations import ARROW_STYLES, BUBBLE_STYLES, bubble_path, draw_arrow, text_document, text_font
-from .blur import shared_blur, sequential_blur, BlurPreview
+from .blur import shared_blur, sequential_blur, blur_mask, BlurPreview
 from .markers import MARKER_STYLES, marker_path, marker_body_hit
 from .workspace import IMAGE_SUFFIXES, read_image
 
@@ -62,6 +62,7 @@ class Canvas(QWidget):
         self.zoom = 1.0
         self.arrow_style = 'classic'
         self.blur_mode = 'shared'
+        self.blur_inside = False
         self.rectangle_format = {'width': 4, 'rounded': False, 'radius': 12}
         self.marker_style = 'circle'
         self.begin = self.end = None
@@ -123,11 +124,11 @@ class Canvas(QWidget):
         return {key: QImage(value) if isinstance(value, QImage) else copy.deepcopy(value) for key, value in obj.items()}
 
     def snapshot(self):
-        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format.copy(), self.text_format.copy(), self.arrow_style, self.blur_mode, self.blur_radius, self.rectangle_format.copy(), self.marker_style)
+        return (QImage(self.base), [self.clone_object(obj) for obj in self.objects], self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format.copy(), self.text_format.copy(), self.arrow_style, self.blur_mode, self.blur_radius, self.rectangle_format.copy(), self.marker_style, self.blur_inside)
 
     def restore(self, state):
         self.finish_text(False)
-        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format, self.text_format, self.arrow_style, self.blur_mode, self.blur_radius, self.rectangle_format, self.marker_style = state
+        self.base, self.objects, self.marker_color, self.rectangle_color, self.arrow_color, self.bubble_format, self.text_format, self.arrow_style, self.blur_mode, self.blur_radius, self.rectangle_format, self.marker_style, self.blur_inside = state
         self.selected = None
         self.arrow_color_changed.emit(self.arrow_color)
         self.rectangle_color_changed.emit(self.rectangle_color)
@@ -220,6 +221,16 @@ class Canvas(QWidget):
             self.objects[self.selected]['style'] = style
         if self.snapshot() != before:
             self.arrow_style_changed.emit()
+            self.commit(before)
+
+    def set_blur_inside(self, inside):
+        self.finish_text()
+        before = self.snapshot()
+        self.blur_inside = bool(inside)
+        if self.selected is not None and self.objects[self.selected]['kind'] == 'desfoque':
+            self.objects[self.selected]['inside'] = self.blur_inside
+        if self.snapshot() != before:
+            self.blur_settings_changed.emit()
             self.commit(before)
 
     def set_blur_mode(self, mode):
@@ -433,7 +444,7 @@ class Canvas(QWidget):
     def draw_object(self, image, obj):
         rect = self.object_rect(obj)
         if obj['kind'] == 'desfoque':
-            sequential_blur(image, rect, obj['radius'])
+            sequential_blur(image, rect, obj['radius'], obj.get('inside', False))
             return
         p = QPainter(image)
         self.paint_object(p, obj)
@@ -502,6 +513,25 @@ class Canvas(QWidget):
             self._legacy_prefix_key = key
         return self._legacy_prefix, objects[last], objects[last+1:]
 
+    def blur_regions(self, objects):
+        outside, inside = [], []
+        for obj in objects:
+            if obj['kind'] == 'desfoque':
+                (inside if obj.get('inside', False) else outside).append((self.object_rect(obj), obj['radius']))
+        return outside, inside
+
+    @staticmethod
+    def paint_blur_layers(painter, original, blurred, mask):
+        # Disjoint clips preserve transparency without painting a pixel twice.
+        painter.save()
+        painter.setClipRegion(mask, Qt.ClipOperation.IntersectClip)
+        painter.drawImage(original.rect(), blurred)
+        painter.restore()
+        painter.save()
+        painter.setClipRegion(QRegion(original.rect())-mask, Qt.ClipOperation.IntersectClip)
+        painter.drawImage(0, 0, original)
+        painter.restore()
+
     def render_image(self, preview=False):
         image = QImage(self.base)
         if image.isNull():
@@ -510,14 +540,14 @@ class Canvas(QWidget):
         if self.blur_mode == 'shared':
             self._legacy_prefix_key = None
             self._legacy_prefix = QImage()
-            regions = [(self.object_rect(obj), obj['radius']) for obj in objects if obj['kind'] == 'desfoque']
-            image = shared_blur(image, regions)
+            regions, inside = self.blur_regions(objects)
+            image = shared_blur(image, regions, inside)
             objects = [obj for obj in objects if obj['kind'] != 'desfoque']
         else:
             prefix, effect, objects = self.legacy_layers(objects)
             image = QImage(prefix)
             if effect is not None:
-                sequential_blur(image, self.object_rect(effect), effect['radius'])
+                sequential_blur(image, self.object_rect(effect), effect['radius'], effect.get('inside', False))
         for obj in objects:
             self.draw_object(image, obj)
         return image
@@ -530,33 +560,27 @@ class Canvas(QWidget):
         if self.blur_mode == 'shared':
             self._legacy_prefix_key = None
             self._legacy_prefix = QImage()
-            regions = [(self.object_rect(obj), obj['radius']) for obj in objects if obj['kind'] == 'desfoque']
-            if regions:
-                blurred = self.blur_preview.preview(self.base, max(radius for _, radius in regions))
-                clear = QRegion()
-                for rect, _ in regions:
-                    clear |= QRegion(rect.intersected(self.base.rect()))
-                # Disjoint clips avoid applying transparency twice in clear areas.
-                painter.save()
-                painter.setClipRegion(QRegion(self.base.rect())-clear, Qt.ClipOperation.IntersectClip)
-                painter.drawImage(self.base.rect(), blurred)
-                painter.restore()
-                painter.save()
-                painter.setClipRegion(clear, Qt.ClipOperation.IntersectClip)
-                painter.drawImage(0, 0, self.base)
-                painter.restore()
+            regions, inside = self.blur_regions(objects)
+            if regions or inside:
+                blurred = self.blur_preview.preview(self.base, max(radius for _, radius in [*regions, *inside]))
+                self.paint_blur_layers(painter, self.base, blurred, blur_mask(self.base.rect(), regions, inside))
             else:
                 painter.drawImage(0, 0, self.base)
                 self.blur_preview.set_busy(False)
             objects = [obj for obj in objects if obj['kind'] != 'desfoque']
         else:
             prefix, effect, objects = self.legacy_layers(objects)
-            painter.drawImage(0, 0, prefix)
-            if effect is not None:
+            if effect is not None and effect.get('inside', False):
+                rect = self.object_rect(effect)
+                self.paint_blur_layers(painter, prefix, self.blur_preview.preview(prefix, effect['radius']),
+                                       QRegion(rect.intersected(prefix.rect())))
+            elif effect is not None:
+                painter.drawImage(0, 0, prefix)
                 painter.drawImage(prefix.rect(), self.blur_preview.preview(prefix, effect['radius']))
                 rect = self.object_rect(effect)
                 painter.drawImage(rect, prefix, rect)
             else:
+                painter.drawImage(0, 0, prefix)
                 self.blur_preview.set_busy(False)
         for obj in objects:
             self.paint_object(painter, obj)
@@ -616,10 +640,13 @@ class Canvas(QWidget):
                     self.text_format_changed.emit()
                 if self.objects[self.selected]['kind'] == 'desfoque':
                     self.blur_selected.emit(self.objects[self.selected]['radius'])
+                    self.blur_settings_changed.emit()
             self.update()
             return
         self.selected = None
         self.pending = {'kind': self.tool, 'a': [point.x(), point.y()], 'b': [point.x(), point.y()], 'radius': self.blur_radius}
+        if self.tool == 'desfoque':
+            self.pending['inside'] = self.blur_inside
         if self.tool == 'seta':
             self.pending['color'] = self.arrow_color
             self.pending['style'] = self.arrow_style

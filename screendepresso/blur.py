@@ -6,7 +6,7 @@ import threading
 import weakref
 from PIL import Image, ImageFilter
 from PySide6.QtCore import QObject, Signal, Qt, QSize
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage, QPainter, QRegion
 from .i18n import tr
 
 # Across all tabs, rather than a full-size cache per document/radius.
@@ -109,25 +109,52 @@ def clear_blur_cache():
         _cache_bytes = 0
 
 
-def shared_blur(image, regions):
-    """Exact export: blur once and restore the union of clear regions."""
-    if not regions:
+def blur_mask(bounds, regions, inside_regions=()):
+    """Inside effects add blur; outside effects preserve their union of clear areas."""
+    full = QRegion(bounds)
+    mask = QRegion(full) if regions else QRegion()
+    for rect, _ in regions:
+        mask -= QRegion(rect.intersected(bounds))
+    for rect, _ in inside_regions:
+        mask |= QRegion(rect.intersected(bounds))
+    return mask
+
+
+def shared_blur(image, regions, inside_regions=()):
+    """Exact export using one Gaussian layer for both effect directions."""
+    if not regions and not inside_regions:
         return QImage(image)
-    result = cached_blurred_image(image, max(radius for rect, radius in regions))
-    painter = QPainter(result)
-    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-    for rect, radius in regions:
-        painter.drawImage(rect, image, rect)
-    painter.end()
+    blurred = cached_blurred_image(image, max(radius for rect, radius in [*regions, *inside_regions]))
+    result = QImage(blurred) if regions else QImage(image)
+    if regions:
+        painter = QPainter(result)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        for rect, radius in regions:
+            painter.drawImage(rect, image, rect)
+        painter.end()
     # Match 0.7.1: restore regions in RGBA before converting the final image.
     # Converting earlier changes the hidden RGB of fully transparent pixels.
-    return result.convertToFormat(QImage.Format.Format_ARGB32)
+    result = result.convertToFormat(QImage.Format.Format_ARGB32)
+    if inside_regions:
+        painter = QPainter(result)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.setClipRegion(blur_mask(image.rect(), (), inside_regions))
+        painter.drawImage(0, 0, blurred.convertToFormat(result.format()))
+        painter.end()
+    return result
 
 
-def sequential_blur(image, rect, radius):
+def sequential_blur(image, rect, radius, inside=False):
     """Preserve the original legacy compositing order, including annotations."""
-    original = image.copy(rect)
     blurred = cached_blurred_image(image, radius)
+    if inside:
+        painter = QPainter(image)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.setClipRect(rect)
+        painter.drawImage(0, 0, blurred.convertToFormat(image.format()))
+        painter.end()
+        return
+    original = image.copy(rect)
     painter = QPainter(image)
     painter.drawImage(0, 0, blurred)
     painter.drawImage(rect.topLeft(), original)

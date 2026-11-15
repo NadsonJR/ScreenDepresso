@@ -2,7 +2,7 @@ from .i18n import tr, mode_label, set_language, translate_tree, native_help
 import os
 import sys
 from pathlib import Path
-from PySide6.QtCore import Qt, QRect, QTimer, QSize, QUrl
+from PySide6.QtCore import Qt, QRect, QTimer, QSize, QUrl, QEvent
 from PySide6.QtGui import QIcon, QKeySequence, QActionGroup, QAction, QColor, QImage, QPixmap, QFont, QFontDatabase, QCursor, QDesktopServices
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QSpinBox, QSlider, QToolBar, QDockWidget, QColorDialog, QSizePolicy, QToolButton, QWidgetAction, QFontComboBox, QFormLayout, QCheckBox
 from .appearance import STYLE, dark_palette, icon as toolbar_icon
@@ -220,6 +220,18 @@ class MainWindow(QMainWindow):
         blur_action.setDefaultWidget(blur_panel)
         self.blur_menu.addAction(blur_action)
         self.blur_menu.addSeparator()
+        self.blur_areas = {}
+        self.blur_menu.aboutToShow.connect(self.display_blur_options)
+        blur_areas_group = QActionGroup(self.blur_menu)
+        blur_areas_group.setExclusive(True)
+        for inside, label in [(False, 'Blur outside selection'), (True, 'Blur inside selection')]:
+            action = self.blur_menu.addAction(tr(label))
+            action.setCheckable(True)
+            action.setToolTip(tr('Changes the selected blur effect and the next areas you draw.'))
+            action.triggered.connect(lambda checked=False, value=inside: self.canvas.set_blur_inside(value))
+            blur_areas_group.addAction(action)
+            self.blur_areas[inside] = action
+        self.blur_menu.addSeparator()
         self.blur_modes = {}
         blur_modes_group = QActionGroup(self.blur_menu)
         blur_modes_group.setExclusive(True)
@@ -257,6 +269,9 @@ class MainWindow(QMainWindow):
                 if isinstance(button, QToolButton):
                     button.setFont(self.font())
                     button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+                    if bar is ribbon and button.menu() is not None:
+                        button.setProperty('ribbonMenu', True)
+                        button.installEventFilter(self)
         self.dimensions = QLabel(tr('No image • Capture a screen to get started'))
         zoom_panel = QWidget()
         zoom_layout = QHBoxLayout(zoom_panel)
@@ -421,6 +436,15 @@ class MainWindow(QMainWindow):
     def update_editor_controls(self, callback, *args):
         callback(*args)
         self.context_bar.refresh()
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.Resize and watched.property('ribbonMenu'):
+            # Qt style sheets treat percentage widths as fixed pixel values.
+            # Use the real logical width, including after locale/style changes.
+            style = f'QToolButton::menu-button {{ width: {event.size().width()}px; }}'
+            if watched.styleSheet() != style:
+                watched.setStyleSheet(style)
+        return super().eventFilter(watched, event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -769,7 +793,13 @@ class MainWindow(QMainWindow):
     def display_blur_options(self):
         self.blur_modes[self.canvas.blur_mode].setChecked(True)
         selected = self.canvas.objects[self.canvas.selected] if self.canvas.selected is not None else None
+        inside = selected.get('inside', False) if selected is not None and selected['kind'] == 'desfoque' else self.canvas.blur_inside
+        self.blur_areas[inside].setChecked(True)
+        label = tr('Blur inside selection') if inside else tr('Blur outside selection')
+        self.tool_actions['desfoque'].setText(label)
+        self.tool_actions['desfoque'].setToolTip(label)
         self.display_blur_radius(selected['radius'] if selected is not None and selected['kind'] == 'desfoque' else self.canvas.blur_radius)
+        self.sync_tool(self.canvas.tool)
 
     def display_zoom(self, percent):
         self.zoom_slider.blockSignals(True)
@@ -786,6 +816,8 @@ class MainWindow(QMainWindow):
                 action.setChecked(False)
             self.tool_group.setExclusive(True)
         hints = {'selecionar': tr('Select • Drag to move; use handles to resize'), 'texto': tr('Text • Drag a box and type; Ctrl+Enter confirms; Esc cancels'), 'seta': tr('Arrow • Drag on the image to draw'), 'retângulo': tr('Rectangle • Drag on the image to draw'), 'recorte': tr('Crop • Drag the area you want to keep'), 'desfoque': tr('Blur • Drag the area you want to keep sharp'), 'numero': tr('Numbers • Click for the next number; drag from the marker to its target'), 'balao': tr('Balloon • Drag to draw; move the tail handle to point at an object')}
+        if name == 'desfoque' and self.canvas.blur_inside:
+            hints[name] = tr('Blur • Drag the area you want to blur')
         from .i18n import REVERSE
         source = REVERSE.get(hints[name], hints[name])
         self.tool_hint.setProperty('helpSource', source)
@@ -995,8 +1027,10 @@ class MainWindow(QMainWindow):
         try:
             path = self.history.save(image)
             self.tabs.open_image(image, path, capture=True)
+            QApplication.clipboard().setImage(image)
             self.update_dimensions()
             self.refresh()
+            self.statusBar().showMessage(tr('Image copied. Keep the application open to provide clipboard data.'), 4000)
         except OSError as exc:
             QMessageBox.warning(self, tr('Workspace'), str(exc))
 
@@ -1409,13 +1443,11 @@ def run_application(app, instance):
         image = QImage(100, 100, QImage.Format.Format_ARGB32)
         image.fill(QColor('red'))
         window.finish_capture(image)
-        window.copy()
         if QApplication.clipboard().image() != image or window.list.count() < 1:
             raise RuntimeError('Smoke test failed')
         second = QImage(120, 80, QImage.Format.Format_ARGB32)
         second.fill(QColor('blue'))
         window.finish_capture(second)
-        window.copy()
         if window.tabs.count() != 2 or QApplication.clipboard().image() != second:
             raise RuntimeError('Capture tabs smoke test failed')
         canvas = window.canvas
@@ -1451,6 +1483,9 @@ def run_application(app, instance):
         probe = Canvas()
         large = QImage(2304, 1296, QImage.Format.Format_ARGB32)
         large.fill(QColor('white'))
+        painter = QPainter(large)
+        painter.fillRect(285, 100, 100, 200, QColor('black'))
+        painter.end()
         probe.load(large)
         probe.objects = [{'kind':'desfoque', 'a':[100,100], 'b':[300,300], 'radius':14}]
         viewport = QImage(640, 480, QImage.Format.Format_ARGB32)
@@ -1468,7 +1503,14 @@ def run_application(app, instance):
             time.sleep(.005)
         if probe.blur_preview.busy or probe.image.size() != large.size():
             raise RuntimeError('Full-resolution background blur smoke test failed')
+        probe.objects[0]['inside'] = True
+        local = probe.image
+        if local.pixel(302, 200) != large.pixel(302, 200) or local.pixel(285, 200) == large.pixel(285, 200):
+            raise RuntimeError('Inside blur changed pixels outside its area or did not blur inside')
         probe.deleteLater()
+        from .smoke import verify_video_bundle
+        with tempfile.TemporaryDirectory(prefix='.video-smoke-', dir=window.history.directory) as temporary:
+            print(verify_video_bundle(temporary), flush=True)
         print('Interface, tabs, balloons, text, zoom, workspace and clipboard: OK (offscreen)', flush=True)
         QTimer.singleShot(100, window.request_quit)
     sys.exit(app.exec())
