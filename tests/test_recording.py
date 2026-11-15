@@ -14,12 +14,45 @@ app = QApplication.instance() or QApplication([])
 
 def test_recording_options_keep_valid_values_and_reject_invalid_ones(tmp_path):
     options = normalize_recording({'directory': str(tmp_path), 'fps': 60, 'quality': 'high', 'countdown': 0,
-                                   'microphone': True, 'microphone_device': 'mic-1'})
-    assert options == {'fps': 60, 'quality': 'high', 'countdown': 0, 'microphone': True, 'microphone_device': 'mic-1'}
+                                   'microphone': True, 'microphone_device': 'mic-1', 'system_audio': True})
+    assert options == {'fps': 60, 'quality': 'high', 'countdown': 0, 'microphone': True, 'microphone_device': 'mic-1',
+                       'system_audio': True}
     fallback = normalize_recording({'fps': 31, 'quality': 'ultra', 'countdown': True,
-                                    'microphone': 'yes'})
+                                    'microphone': 'yes', 'system_audio': 1})
     assert fallback == default_recording()
     assert normalize_recording(None) == default_recording()
+
+
+def test_windows_recordings_skip_media_foundation_aac_and_keep_user_exclusions(monkeypatch):
+    from screendepresso import recorder
+    monkeypatch.setattr(recorder.sys, 'platform', 'win32')
+    monkeypatch.setenv('QT_FFMPEG_EXCLUDE_ENCODERS', 'h264_mf')
+    recorder.prefer_ffmpeg_aac()
+    recorder.prefer_ffmpeg_aac()
+    assert os.environ['QT_FFMPEG_EXCLUDE_ENCODERS'] == 'h264_mf,aac_mf'
+    monkeypatch.delenv('QT_FFMPEG_EXCLUDE_ENCODERS')
+    monkeypatch.setattr(recorder.sys, 'platform', 'linux')
+    recorder.prefer_ffmpeg_aac()
+    assert 'QT_FFMPEG_EXCLUDE_ENCODERS' not in os.environ
+
+
+def test_system_audio_source_pads_silence_upmixes_and_bounds_backlog():
+    import pytest
+    np = pytest.importorskip('numpy')
+    from screendepresso.system_audio import CHANNELS, MAX_BACKLOG, RATE, _Source
+    source = _Source('system', None)
+    # Silent loopback devices deliver nothing: the mixer gets zeros, not a gap.
+    assert source.take(480).shape == (480, CHANNELS) and not source.take(480).any()
+    source.push(np.full((100, 1), .5, np.float32))  # mono microphone
+    block = source.take(160)
+    assert block.shape == (160, CHANNELS) and (block[:100] == .5).all() and not block[100:].any()
+    source.push(np.ones((300, 2), np.float32))
+    assert source.take(200).shape == (200, CHANNELS) and source.frames == 100
+    source.take(100)
+    source.push(np.zeros((int(RATE*MAX_BACKLOG)+1000, 2), np.float32))
+    source.push(np.ones((10, 2), np.float32))
+    source.take(10)
+    assert source.frames <= int(RATE*MAX_BACKLOG)
 
 
 def test_region_crop_scales_to_frame_pixels_with_even_size():
@@ -114,6 +147,33 @@ def test_idle_recorder_ignores_stop_and_pause():
     recorder.pause()
     recorder.resume()
     assert recorder.state == 'idle' and not recorder.active
+
+
+def test_audio_toggles_keep_the_record_menu_open(tmp_path, monkeypatch):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path/'config'))
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path/'data'))
+    from screendepresso.app import MainWindow
+    window = MainWindow()
+    menu = window.record_menu
+    try:
+        menu.popup(QPoint(100, 100))
+        QTest.qWaitForWindowExposed(menu)
+        microphone = next(a for a in menu.actions() if a.text() == 'Record microphone audio')
+        QTest.mouseClick(menu, Qt.MouseButton.LeftButton, pos=menu.actionGeometry(microphone).center())
+        assert menu.isVisible() and microphone.isChecked() and Settings().recording['microphone']
+        menu.setActiveAction(microphone)
+        QTest.keyClick(menu, Qt.Key.Key_Return)
+        assert menu.isVisible() and not microphone.isChecked() and not Settings().recording['microphone']
+        # Ordinary entries still close the menu.
+        last = next(a for a in menu.actions() if a.text() == 'Open last recording')
+        last.setEnabled(True)
+        QTest.mouseClick(menu, Qt.MouseButton.LeftButton, pos=menu.actionGeometry(last).center())
+        assert not menu.isVisible()
+    finally:
+        menu.hide()
+        window.close()
 
 
 def test_record_menu_hotkey_and_settings_tab(tmp_path, monkeypatch):

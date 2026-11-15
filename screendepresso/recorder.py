@@ -7,10 +7,12 @@ back to MPEG-4 Part 2 (still .mp4) when H.264 is missing or fails to start. Regi
 from the screen frames and fed through QVideoFrameInput. QtMultimedia is
 imported only when a recording starts, so idle startup stays light.
 """
+import sys
 import time
 from pathlib import Path
 from PySide6.QtCore import QObject, QRect, QUrl, Signal
 from .i18n import tr
+from .system_audio import CHANNELS as MIXER_CHANNELS, RATE as MIXER_RATE, AudioMixer, system_audio_supported
 
 FRAME_RATES = (15, 24, 30, 60)
 QUALITIES = {'low': 'Low (smaller files)', 'normal': 'Normal', 'high': 'High', 'very_high': 'Very high'}
@@ -19,7 +21,7 @@ COUNTDOWNS = (0, 3, 5)
 
 def default_recording():
     return {'fps': 30, 'quality': 'normal',
-            'countdown': 3, 'microphone': False, 'microphone_device': ''}
+            'countdown': 3, 'microphone': False, 'microphone_device': '', 'system_audio': False}
 
 
 def normalize_recording(data):
@@ -32,8 +34,9 @@ def normalize_recording(data):
             result[key] = data[key]
     if data.get('quality') in QUALITIES:
         result['quality'] = data['quality']
-    if isinstance(data.get('microphone'), bool):
-        result['microphone'] = data['microphone']
+    for key in ('microphone', 'system_audio'):
+        if isinstance(data.get(key), bool):
+            result[key] = data[key]
     if isinstance(data.get('microphone_device'), str):
         result['microphone_device'] = data['microphone_device']
     return result
@@ -94,6 +97,23 @@ def remove_later(path, delay=1500):
         remove()
 
 
+def prefer_ffmpeg_aac():
+    """Media Foundation's AAC encoder (aac_mf) ignores the recording quality
+    and writes 16 kb/s HE-AAC, which muffles music from the speakers. Hiding
+    it from Qt makes FFmpeg's own AAC encoder honour the quality (~128 kb/s
+    at Normal). Qt reads the list once, when QtMultimedia first loads, so this
+    runs at import time, before any QtMultimedia use."""
+    import os
+    if sys.platform != 'win32':
+        return
+    excluded = [name for name in os.environ.get('QT_FFMPEG_EXCLUDE_ENCODERS', '').split(',') if name]
+    if 'aac_mf' not in excluded:
+        os.environ['QT_FFMPEG_EXCLUDE_ENCODERS'] = ','.join(excluded+['aac_mf'])
+
+
+prefer_ffmpeg_aac()
+
+
 def preferred_codec():
     from PySide6.QtMultimedia import QMediaFormat
     supported = QMediaFormat(QMediaFormat.FileFormat.MPEG4).supportedVideoCodecs(QMediaFormat.ConversionMode.Encode)
@@ -125,6 +145,9 @@ class ScreenRecorder(QObject):
         self._objects = []
         self._recorder = None
         self._audio = None
+        self._mixer = None
+        self._audio_buffers = None
+        self._audio_pending = []
         self._discard = False
         self._error = None
         self._request = None
@@ -189,7 +212,13 @@ class ScreenRecorder(QObject):
         source.errorOccurred.connect(lambda error, message: self._fail(message))
         self._objects.append(source)
         self._audio = None
-        if options['microphone'] and microphone_permission() == 'granted':
+        self._mixer = None
+        microphone = options['microphone'] and microphone_permission() == 'granted'
+        if options['system_audio'] and system_audio_supported():
+            # One session takes a single audio source, so the microphone is
+            # mixed with the system audio before it reaches the encoder.
+            self._setup_system_audio(session, microphone, options['microphone_device'])
+        elif microphone:
             devices = QMediaDevices.audioInputs()
             device = next((d for d in devices if device_key(d) == options['microphone_device']), None)
             device = device or QMediaDevices.defaultAudioInput()
@@ -201,6 +230,46 @@ class ScreenRecorder(QObject):
         self._set_state('starting')
         source.start()
         recorder.record()
+        if self._mixer is not None:
+            self._mixer.start()
+
+    def _setup_system_audio(self, session, microphone, microphone_id):
+        from PySide6.QtMultimedia import QAudioBufferInput, QAudioFormat
+        audio_format = QAudioFormat()
+        audio_format.setSampleRate(MIXER_RATE)
+        audio_format.setChannelCount(MIXER_CHANNELS)
+        audio_format.setChannelConfig(QAudioFormat.ChannelConfig.ChannelConfigStereo)
+        audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        buffers = QAudioBufferInput(audio_format, self)
+        session.setAudioBufferInput(buffers)
+        mixer = AudioMixer(system=True, microphone=microphone, microphone_id=microphone_id, parent=self)
+        mixer.chunk.connect(self._send_audio)
+        mixer.problem.connect(lambda message: print('ScreenDepresso audio:', message, file=sys.stderr))
+        buffers.readyToSendAudioBuffer.connect(self._flush_audio)
+        self._audio_format = audio_format
+        self._audio_buffers = buffers
+        self._audio_pending = []
+        self._audio_time = 0
+        self._mixer = mixer
+        self._objects.extend([buffers, mixer])
+
+    def _send_audio(self, data):
+        from PySide6.QtCore import QByteArray
+        from PySide6.QtMultimedia import QAudioBuffer
+        if self._mixer is None or self.state not in ('starting', 'recording'):
+            return
+        frames = len(data)//(2*MIXER_CHANNELS)
+        self._audio_pending.append(QAudioBuffer(QByteArray(data), self._audio_format, self._audio_time))
+        self._audio_time += frames*1_000_000//MIXER_RATE
+        # Keep at most ~2 s queued if the encoder stalls.
+        del self._audio_pending[:-100]
+        self._flush_audio()
+
+    def _flush_audio(self):
+        while self._audio_pending and self._audio_buffers is not None:
+            if not self._audio_buffers.sendAudioBuffer(self._audio_pending[0]):
+                break
+            self._audio_pending.pop(0)
 
     def _duration_changed(self, milliseconds):
         self._duration = max(self._duration, int(milliseconds))
@@ -243,6 +312,8 @@ class ScreenRecorder(QObject):
             clock = getattr(self, '_clock', None)
             if clock is not None:
                 clock['paused_at'] = time.monotonic()
+            if self._mixer is not None:
+                self._mixer.paused = True
             self._recorder.pause()
 
     def resume(self):
@@ -251,6 +322,8 @@ class ScreenRecorder(QObject):
             if clock is not None and clock['paused_at'] is not None:
                 clock['paused'] += time.monotonic()-clock['paused_at']
                 clock['paused_at'] = None
+            if self._mixer is not None:
+                self._mixer.paused = False
             self._recorder.record()
 
     def toggle_pause(self):
@@ -259,10 +332,12 @@ class ScreenRecorder(QObject):
     def set_microphone_muted(self, muted):
         if self._audio is not None:
             self._audio.setMuted(muted)
+        if self._mixer is not None:
+            self._mixer.muted = muted
 
     @property
     def has_microphone(self):
-        return self._audio is not None
+        return self._audio is not None or (self._mixer is not None and self._mixer.has_microphone)
 
     def stop(self, discard=False):
         if self._recorder is None or self.state in ('idle', 'stopping'):
@@ -323,6 +398,7 @@ class ScreenRecorder(QObject):
                     pass
             item.deleteLater()
         self._objects, self._recorder, self._audio, self._clock = [], None, None, None
+        self._mixer, self._audio_buffers, self._audio_pending = None, None, []
 
     def _finish(self):
         path, discard, error = self.path, self._discard, self._error

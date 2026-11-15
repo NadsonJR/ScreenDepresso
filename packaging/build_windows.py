@@ -39,12 +39,13 @@ def main():
     run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', '--windowed',
         '--name', 'screendepresso', '--paths', str(ROOT), '--icon', str(build/'screendepresso.ico'),
         '--add-data', str(translation)+os.pathsep+'screendepresso/translations',
+        '--hidden-import', 'soundcard', '--collect-data', 'soundcard',
         '--exclude-module', 'Xlib', '--exclude-module', 'PySide6.QtWebEngineCore',
         '--exclude-module', 'PySide6.QtWebEngineWidgets', '--exclude-module', 'PySide6.QtQml',
         '--exclude-module', 'PySide6.QtQuick', str(ROOT/'packaging/entrypoint.py'))
     bundle = ROOT/'dist/screendepresso'
     notices = bundle/'licenses'
-    for name in ('PySide6', 'PySide6-Essentials', 'PySide6-Addons', 'shiboken6', 'Pillow', 'Send2Trash', 'pyinstaller'):
+    for name in ('PySide6', 'PySide6-Essentials', 'PySide6-Addons', 'shiboken6', 'Pillow', 'Send2Trash', 'SoundCard', 'numpy', 'cffi', 'pycparser', 'pyinstaller'):
         distribution = importlib.metadata.distribution(name)
         for entry in distribution.files or []:
             if any(word in str(entry).lower() for word in ('license','copying','copyright','notice')):

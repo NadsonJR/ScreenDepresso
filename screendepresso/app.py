@@ -18,7 +18,8 @@ from .platform_support import capture_desktop, crop_desktop, global_hotkeys_avai
 from .capture_ui import Selector, WindowPicker
 from .update_panel import UpdatePanel
 from .recorder import ScreenRecorder, capturable_window, microphone_permission, request_microphone_permission
-from .recording_ui import Countdown, RecordingBar, RegionFrame
+from .system_audio import system_audio_supported
+from .recording_ui import KEEP_MENU_OPEN, Countdown, RecordingBar, RegionFrame, keep_menu_open
 from .workspace import WorkspaceStore as History, WorkspaceView, read_image, is_video
 
 def windows():
@@ -1022,10 +1023,22 @@ class MainWindow(QMainWindow):
         menu.addAction(toolbar_icon('window', plate=False), tr('Record window…'), lambda: self.record('janela'))
         menu.addAction(toolbar_icon('region', plate=False), tr('Record region…'), lambda: self.record('região'))
         menu.addSeparator()
+        keep_menu_open(menu)
         microphone = menu.addAction(tr('Record microphone audio'))
+        microphone.setProperty(KEEP_MENU_OPEN, True)
         microphone.setCheckable(True)
         microphone.setChecked(self.settings.recording['microphone'])
         microphone.toggled.connect(self.set_recording_microphone)
+        system_audio = menu.addAction(tr('Record system audio'))
+        system_audio.setProperty(KEEP_MENU_OPEN, True)
+        system_audio.setCheckable(True)
+        if system_audio_supported():
+            system_audio.setChecked(self.settings.recording['system_audio'])
+            system_audio.setToolTip(tr('Records what plays on the speakers or headphones.'))
+        else:
+            system_audio.setEnabled(False)
+            system_audio.setToolTip(tr('System audio recording is not available on this system.'))
+        system_audio.toggled.connect(self.set_recording_system_audio)
         menu.addSeparator()
         last = menu.addAction(tr('Open last recording'), self.open_last_recording)
         last.setEnabled(self.last_recording is not None and Path(self.last_recording).exists())
@@ -1038,6 +1051,13 @@ class MainWindow(QMainWindow):
         try:
             self.settings.save(self.settings.directory, self.settings.hotkeys,
                                recording=dict(self.settings.recording, microphone=enabled))
+        except OSError as exc:
+            self.statusBar().showMessage(str(exc), 4000)
+
+    def set_recording_system_audio(self, enabled):
+        try:
+            self.settings.save(self.settings.directory, self.settings.hotkeys,
+                               recording=dict(self.settings.recording, system_audio=enabled))
         except OSError as exc:
             self.statusBar().showMessage(str(exc), 4000)
 

@@ -214,6 +214,15 @@ class SettingsDialog(QDialog):
         self.recording_device.setEnabled(options['microphone'])
         self.recording_microphone.toggled.connect(self.recording_device.setEnabled)
         form.addRow(tr('Microphone:'), self.recording_device)
+        from .system_audio import system_audio_supported
+        self.recording_system_audio = QCheckBox(tr('Record system audio'))
+        if system_audio_supported():
+            self.recording_system_audio.setChecked(options['system_audio'])
+            self.recording_system_audio.setToolTip(tr('Records what plays on the speakers or headphones.'))
+        else:
+            self.recording_system_audio.setEnabled(False)
+            self.recording_system_audio.setToolTip(tr('System audio recording is not available on this system.'))
+        form.addRow(self.recording_system_audio)
         layout.addLayout(form)
         note = QLabel(tr("Recordings are saved in the workspace as MP4: H.264 when the system provides an encoder, otherwise MPEG-4. Lower frame rates and quality use less CPU and disk."))
         note.setWordWrap(True)
@@ -224,7 +233,8 @@ class SettingsDialog(QDialog):
     def recording_options(self):
         return {'fps': self.recording_fps.currentData(),
                 'quality': self.recording_quality.currentData(), 'countdown': self.recording_countdown.currentData(),
-                'microphone': self.recording_microphone.isChecked(), 'microphone_device': self.recording_device.currentData()}
+                'microphone': self.recording_microphone.isChecked(), 'microphone_device': self.recording_device.currentData(),
+                'system_audio': self.recording_system_audio.isChecked() and self.recording_system_audio.isEnabled()}
 
     def check_updates(self):
         self.show_updates()

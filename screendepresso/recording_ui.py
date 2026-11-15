@@ -4,7 +4,7 @@ These windows are excluded from the recording where the platform allows it
 (Windows 10 2004+ and macOS); elsewhere they are kept outside the region.
 """
 import sys
-from PySide6.QtCore import QPoint, QRect, QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 from .i18n import tr
@@ -30,6 +30,33 @@ def exclude_from_capture(widget):
             view.window().setSharingType_(0)  # NSWindowSharingNone
     except Exception:
         pass
+
+
+KEEP_MENU_OPEN = 'keep_menu_open'
+
+
+class _KeepMenuOpen(QObject):
+    """Toggles actions marked with KEEP_MENU_OPEN without closing the menu,
+    so several options can be switched in one visit."""
+
+    def eventFilter(self, menu, event):
+        kind = event.type()
+        action = None
+        if kind == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            action = menu.actionAt(event.position().toPoint())
+        elif kind == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            action = menu.activeAction()
+        if action is not None and action.isEnabled() and action.property(KEEP_MENU_OPEN):
+            action.trigger()
+            return True
+        return False
+
+
+def keep_menu_open(menu):
+    """Install once on a menu whose KEEP_MENU_OPEN actions should not close it."""
+    if menu.property('_keep_open_filter') is None:
+        menu.installEventFilter(_KeepMenuOpen(menu))
+        menu.setProperty('_keep_open_filter', True)
 
 
 def format_duration(milliseconds):

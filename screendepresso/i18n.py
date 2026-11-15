@@ -284,7 +284,10 @@ CATALOG.update({
  'Stop recording': 'Parar gravação', 'Record full screen': 'Gravar tela inteira',
  'Records the monitor under the mouse pointer.': 'Grava o monitor onde está o ponteiro do mouse.',
  'Record window…': 'Gravar janela…', 'Record window': 'Gravar janela', 'Record region…': 'Gravar região…',
- 'Record microphone audio': 'Gravar áudio do microfone', 'Play video': 'Reproduzir vídeo', 'Open the recording in the default video player': 'Abrir a gravação no player de vídeo padrão',
+ 'Record microphone audio': 'Gravar áudio do microfone', 'Record system audio': 'Gravar áudio do sistema',
+ 'Records what plays on the speakers or headphones.': 'Grava o que toca nos alto-falantes ou fones de ouvido.',
+ 'System audio recording is not available on this system.': 'A gravação do áudio do sistema não está disponível neste sistema.',
+'Play video': 'Reproduzir vídeo', 'Open the recording in the default video player': 'Abrir a gravação no player de vídeo padrão',
  'Recordings: {count}': 'Gravações: {count}', 'Recordings cannot be duplicated in the workspace.': 'Gravações não podem ser duplicadas na workspace.',
  'Could not save the recording in the workspace.': 'Não foi possível salvar a gravação na workspace.',
  'Double-click to open an image or play a recording. Drag a thumbnail onto the editor to add it as an editable image.':
