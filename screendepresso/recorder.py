@@ -263,9 +263,10 @@ class ScreenRecorder(QObject):
 
     def _audio_problem(self, message):
         """Keep the cause for the end-of-recording notice, log it and tell the UI now."""
+        if message in self.audio_problems:
+            return
         print('ScreenDepresso audio:', message, file=sys.stderr)
-        if message not in self.audio_problems:
-            self.audio_problems.append(message)
+        self.audio_problems.append(message)
         self.audio_problem.emit(message)
 
     def _send_audio(self, data):
@@ -406,7 +407,19 @@ class ScreenRecorder(QObject):
                 self._finish()
 
     def _teardown(self):
+        mixer = self._mixer
+        if mixer is not None:
+            # Stop it first, while its warnings can still be heard, and take them
+            # from its own list: signals sent from its thread arrive too late
+            # for the notice shown when the recording is saved.
+            mixer.stop()
+            for message in list(mixer.problems):
+                self._audio_problem(message)
         for item in reversed(self._objects):
+            if item is mixer:
+                item.blockSignals(True)
+                item.deleteLater()
+                continue
             item.blockSignals(True)
             if hasattr(item, 'stop'):
                 try:

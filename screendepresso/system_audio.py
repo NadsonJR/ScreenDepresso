@@ -22,6 +22,7 @@ TICK = 0.02        # mixer period in seconds
 LATENCY = 0.1      # jitter buffer: output lags the wall clock by this much
 MAX_BACKLOG = 0.4  # drop older audio past this, so device clock drift cannot pile up
 STOP_TIMEOUT = 3.0  # how long stop() waits for the mixer and its readers
+DRAIN_TIMEOUT = 0.5  # cap on emptying a device's buffer after a mute or pause
 
 
 def system_audio_supported():
@@ -82,18 +83,22 @@ class _Source:
         self.blocks = []
         self.frames = 0
         self.dropping = False
+        self.epoch = 0
 
     def set_dropping(self, dropping):
         """While dropping, pushed audio is discarded. Entering or leaving the
-        state also empties the FIFO, so audio captured during a muted or paused
-        interval (it waits in the jitter buffer) can never reach the video."""
+        state empties the FIFO and starts a new epoch. A read tags its data with
+        the epoch it began in, so a read that straddles a mute or pause (or any
+        block captured before it) is refused instead of being taken as new."""
         with self.lock:
             if dropping == self.dropping:
                 return
             self.dropping = dropping
+            self.epoch += 1
             self.blocks, self.frames = [], 0
 
-    def push(self, data):
+    def push(self, data, epoch=None):
+        """epoch: the source's epoch when this data's read began (None = now)."""
         import numpy as np
         if data is None or len(data) == 0:
             return
@@ -105,7 +110,7 @@ class _Source:
         elif data.shape[1] > CHANNELS:
             data = data[:, :CHANNELS]
         with self.lock:
-            if self.dropping:
+            if self.dropping or (epoch is not None and epoch != self.epoch):
                 return
             self.blocks.append(data)
             self.frames += len(data)
@@ -113,6 +118,7 @@ class _Source:
     def take(self, count):
         import numpy as np
         with self.lock:
+            epoch = self.epoch
             blocks, self.blocks, available, self.frames = self.blocks, [], self.frames, 0
         data = np.concatenate(blocks) if blocks else np.zeros((0, CHANNELS), np.float32)
         excess = available-count-int(MAX_BACKLOG*RATE)
@@ -121,8 +127,10 @@ class _Source:
         result, rest = data[:count], data[count:]
         if len(rest):
             with self.lock:
-                self.blocks.insert(0, rest)
-                self.frames += len(rest)
+                # Leftovers taken before a mute or pause are stale after it.
+                if epoch == self.epoch:
+                    self.blocks.insert(0, rest)
+                    self.frames += len(rest)
         if len(result) < count:
             result = np.concatenate([result, np.zeros((count-len(result), CHANNELS), np.float32)])
         return result
@@ -143,6 +151,7 @@ class AudioMixer(QObject):
         self._muted = False
         self._paused = False
         self._sources = []
+        self.problems = []
         self._stop = threading.Event()
         self._thread = None
         self._mic = None
@@ -172,6 +181,10 @@ class AudioMixer(QObject):
         self._apply_gates()
 
     def _warn(self, message):
+        """Report a problem. It is also kept in `problems`, which survives a
+        blocked or deleted signal and a hand-over to another thread."""
+        if message not in self.problems:
+            self.problems.append(message)
         try:
             self.problem.emit(message)
         except RuntimeError:  # the object is already being deleted
@@ -181,6 +194,12 @@ class AudioMixer(QObject):
         """Discard, at the source, whatever a mute or pause must not record."""
         for source in list(self._sources):
             source.set_dropping(self._paused or (self._muted and source.name == 'microphone'))
+        # Bytes the microphone already holds were captured before this change.
+        if self._mic_io is not None and threading.current_thread() is threading.main_thread():
+            try:
+                self._mic_io.readAll()
+            except RuntimeError:
+                pass
 
     def start(self):
         """Call from the Qt thread: the microphone is read with QAudioSource,
@@ -191,7 +210,7 @@ class AudioMixer(QObject):
                 try:
                     self._start_microphone()
                 except Exception as exc:
-                    self.problem.emit(f'microphone: {exc}')
+                    self._warn(f'microphone: {exc}')
             self._stop.clear()
             self._thread = threading.Thread(target=self._run, name='screendepresso-audio', daemon=True)
             self._thread.start()
@@ -244,7 +263,7 @@ class AudioMixer(QObject):
                 loopback = sc.get_microphone(speaker.id, include_loopback=True)
                 sources.append(_Source('system', self._open(loopback)))
             except Exception as exc:
-                self.problem.emit(f'system audio: {exc}')
+                self._warn(f'system audio: {exc}')
         return sources
 
     @staticmethod
@@ -258,20 +277,42 @@ class AudioMixer(QObject):
             recorder.__enter__()
         return recorder
 
+    def _drain(self, source):
+        """Read and discard what the backend has buffered. Returns the source's
+        epoch from before the drain began, so a change during it drains again."""
+        epoch = source.epoch
+        deadline = time.monotonic()+DRAIN_TIMEOUT
+        while not self._stop.is_set() and time.monotonic() < deadline:
+            try:
+                if not len(source.recorder.record(numframes=None)):
+                    break
+            except Exception as exc:
+                self._warn(f'{source.name}: {exc}')
+                self._stop.set()
+                break
+        return epoch
+
     def _read(self, source):
         import warnings
         # WASAPI loopback reports gaps while nothing plays; the mixer fills them.
         warnings.filterwarnings('ignore', message='data discontinuity')
         com = _com_init()
         try:
+            epoch = source.epoch
             while not self._stop.is_set():
+                if source.epoch != epoch:
+                    # Muted or paused (or resumed) since the last read: whatever
+                    # the backend still holds was captured in the other state.
+                    epoch = self._drain(source)
+                    continue
                 try:
                     data = source.recorder.record(numframes=None)
                 except Exception as exc:
-                    self.problem.emit(f'{source.name}: {exc}')
+                    self._warn(f'{source.name}: {exc}')
                     return
                 if len(data):
-                    source.push(data)
+                    # Refused when a mute or pause happened while this read ran.
+                    source.push(data, epoch)
                 else:
                     time.sleep(0.005)
         finally:
@@ -297,7 +338,7 @@ class AudioMixer(QObject):
                 import soundcard as sc
                 sources = self._open_sources(sc)
             except Exception as exc:
-                self.problem.emit(str(exc))
+                self._warn(str(exc))
             for source in sources:
                 reader = threading.Thread(target=self._read, args=(source,), daemon=True)
                 reader.start()
@@ -327,7 +368,7 @@ class AudioMixer(QObject):
                 pcm = (np.clip(mixed, -1.0, 1.0)*32767).astype('<i2')
                 self.chunk.emit(pcm.tobytes())
         except Exception as exc:
-            self.problem.emit(str(exc))
+            self._warn(str(exc))
         finally:
             self._stop.set()
             deadline = time.monotonic()+STOP_TIMEOUT-0.5

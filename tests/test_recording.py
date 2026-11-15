@@ -81,6 +81,75 @@ def test_muted_or_paused_audio_never_reaches_the_recording():
     assert system.take(10).all()
 
 
+def test_audio_captured_across_a_mute_or_pause_is_refused_and_drained():
+    import pytest
+    import threading
+    np = pytest.importorskip('numpy')
+    from screendepresso.system_audio import AudioMixer, _Source
+    block = np.ones((960, 2), np.float32)  # 20 ms
+    # A read that began before the mute and returns after unmuting is refused.
+    mic = _Source('microphone', None)
+    began = mic.epoch
+    mic.set_dropping(True)
+    mic.set_dropping(False)
+    mic.push(block, began)
+    assert mic.frames == 0
+    mic.push(block, mic.epoch)
+    assert mic.frames == 960
+    # Leftovers taken before a pause are not put back after it.
+    mic.push(np.ones((2000, 2), np.float32))
+    stale = mic.epoch
+    mic.take(100)
+    mic.set_dropping(True)
+    mic.set_dropping(False)
+    assert mic.frames == 0 and mic.epoch != stale
+    # A read straddling the mute is refused, and the backend's buffer is drained.
+    system = _Source('system', None)
+    mixer = AudioMixer()
+    fresh = np.full((960, 2), .5, np.float32)
+    calls = []
+
+    class Device:
+        def record(self, numframes=None):
+            calls.append(len(calls))
+            if len(calls) == 1:  # the mute happens during this read
+                system.set_dropping(True)
+                system.set_dropping(False)
+                return block
+            if len(calls) in (2, 3):  # captured while muted, still in the backend
+                return block
+            if len(calls) == 4:
+                return []
+            mixer._stop.set()
+            return fresh
+    system.recorder = Device()
+    reader = threading.Thread(target=mixer._read, args=(system,), daemon=True)
+    reader.start()
+    reader.join(3)
+    assert not reader.is_alive() and len(calls) == 5
+    assert system.frames == 960 and (system.take(960) == .5).all()
+
+
+def test_stop_warnings_survive_teardown(monkeypatch):
+    import threading
+    from screendepresso import system_audio
+    from screendepresso.system_audio import AudioMixer
+    monkeypatch.setattr(system_audio, 'STOP_TIMEOUT', .2)
+    recorder = ScreenRecorder()
+    mixer = AudioMixer(parent=recorder)
+    release = threading.Event()
+    mixer._thread = threading.Thread(target=release.wait, args=(5,), daemon=True)
+    mixer._thread.start()
+    shown = []
+    recorder.audio_problem.connect(shown.append)
+    recorder._mixer, recorder._objects = mixer, [mixer]
+    try:
+        recorder._teardown()
+        assert recorder.audio_problems and shown == recorder.audio_problems
+    finally:
+        release.set()
+
+
 def test_stop_does_not_close_a_device_that_is_still_being_read():
     import threading
     import time
