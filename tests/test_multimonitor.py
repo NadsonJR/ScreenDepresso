@@ -203,6 +203,37 @@ def test_monitor_menu_all_monitors_and_specific_selection(window,monkeypatch):
     assert 'Primary' in actions[1].text()
 
 
+@pytest.mark.parametrize('mode,screen_name', [
+    ('tela', None), ('tela', 'right'), ('janela', None), ('região', None),
+])
+def test_capture_automatically_copies_image_and_keeps_workspace_and_editor(window, monkeypatch, mode, screen_name):
+    image = QImage(300, 120, QImage.Format.Format_ARGB32)
+    image.fill(QColor('blue'))
+    image.setPixelColor(40, 30, QColor('red'))
+    geometry = QRect(-100, 0, 300, 120)
+    selection = QRect(-80, 10, 60, 80)
+    target = ('Terminal', selection, 42)
+    requests = []
+    def capture_desktop(name=None):
+        requests.append(name)
+        return QPixmap.fromImage(image), geometry
+    monkeypatch.setattr(application, 'capture_desktop', capture_desktop)
+    monkeypatch.setattr(application, 'windows', lambda: [target])
+    expected = image.copy(20, 10, 60, 80) if mode in ('janela', 'região') else image
+    monkeypatch.setattr('screendepresso.macos_backend.capture_window', lambda wid: expected)
+    app.clipboard().setText('previous clipboard content')
+    window.take_capture(mode, target if mode == 'janela' else None, screen_name)
+    if mode == 'região':
+        window.selector.selected.emit(selection)
+        window.selector.close()
+    assert requests == [screen_name]
+    assert app.clipboard().mimeData().hasImage()
+    assert app.clipboard().image().convertToFormat(QImage.Format.Format_ARGB32) == expected
+    assert window.canvas.image.convertToFormat(QImage.Format.Format_ARGB32) == expected
+    assert window.list.count() == 1
+    assert QImage(str(window.history.entries()[0])).convertToFormat(QImage.Format.Format_ARGB32) == expected
+
+
 def test_window_capture_uses_preview_choice_and_refreshes_window_geometry(window,monkeypatch):
     image = QImage(300,120,QImage.Format.Format_ARGB32)
     image.fill(QColor('blue'))
@@ -247,11 +278,13 @@ def test_cancelled_window_picker_restores_editor_without_capture(window,monkeypa
         def deleteLater(self):
             pass
     monkeypatch.setattr(application,'WindowPicker',Picker)
+    app.clipboard().setText('keep this clipboard content')
     window.hide()
     window._capture_pending = True
     window.prepare_capture('janela')
     assert window.isVisible() and window.canvas.base.isNull()
     assert not window._capture_pending
+    assert app.clipboard().text() == 'keep this clipboard content'
 
 
 def test_region_selection_crosses_monitor_boundaries_and_crops_global_origin():

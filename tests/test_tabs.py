@@ -65,6 +65,20 @@ def test_captures_keep_independent_edit_and_undo_histories(window):
     assert len(a.objects) == 1
 
 
+def test_new_capture_replaces_clipboard_without_copying_previous_tab_edits(window):
+    a, b = capture_pair(window)
+    assert app.clipboard().image() == b.base
+    window.tabs.setCurrentIndex(0)
+    assert app.clipboard().image() == b.base
+    third = QImage(90, 70, QImage.Format.Format_ARGB32)
+    third.fill(QColor('green'))
+    window.finish_capture(third)
+    assert app.clipboard().image() == third
+    assert window.canvas.image == third
+    assert a.objects and b.base.width() == 200
+    assert window.tabs.count() == window.list.count() == 3
+
+
 def test_history_reuses_open_tab_without_losing_edits(window):
     a, b = capture_pair(window)
     path = window.tabs.widget(0).source_path

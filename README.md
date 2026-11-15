@@ -77,7 +77,7 @@ Na barra superior, **Full screen** e **Record** têm uma faixa inferior de opç�
 
 Altere os atalhos em **Settings → Hotkeys**, inclusive para combinações com Print quando a plataforma permitir. Atalhos duplicados ou ocupados são informados ao configurar. No macOS, os atalhos exibem símbolos nativos: o `Ctrl` dos exemplos corresponde a **Command**.
 
-Capturas originais são salvas automaticamente no workspace. Abrir uma imagem externa não a move nem a duplica nesse diretório.
+Toda captura de tela inteira, monitor, janela ou região é copiada automaticamente para a área de transferência, salva no workspace e aberta no editor. Você pode tirar o print e colar diretamente em um chat com **Ctrl+V** (ou **Command+V** no macOS). Para copiar alterações feitas no editor, use **Copy image**. No X11, mantenha o ScreenDepresso aberto ao colar em outro aplicativo. Abrir uma imagem externa não a move nem a duplica no workspace.
 
 ## Editor de imagens
 

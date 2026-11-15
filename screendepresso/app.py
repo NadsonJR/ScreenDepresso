@@ -1026,8 +1026,10 @@ class MainWindow(QMainWindow):
         try:
             path = self.history.save(image)
             self.tabs.open_image(image, path, capture=True)
+            QApplication.clipboard().setImage(image)
             self.update_dimensions()
             self.refresh()
+            self.statusBar().showMessage(tr('Image copied. Keep the application open to provide clipboard data.'), 4000)
         except OSError as exc:
             QMessageBox.warning(self, tr('Workspace'), str(exc))
 
@@ -1421,13 +1423,11 @@ def run_application(app, instance):
         image = QImage(100, 100, QImage.Format.Format_ARGB32)
         image.fill(QColor('red'))
         window.finish_capture(image)
-        window.copy()
         if QApplication.clipboard().image() != image or window.list.count() < 1:
             raise RuntimeError('Smoke test failed')
         second = QImage(120, 80, QImage.Format.Format_ARGB32)
         second.fill(QColor('blue'))
         window.finish_capture(second)
-        window.copy()
         if window.tabs.count() != 2 or QApplication.clipboard().image() != second:
             raise RuntimeError('Capture tabs smoke test failed')
         canvas = window.canvas

@@ -6,8 +6,8 @@ from .i18n import tr
 def installed_release_notes():
     return tr('What’s new in version {version}').format(version=__version__) + '\n\n' + '\n\n'.join(
         '• ' + text for text in (
-            tr('Top toolbar menus now open from the lower strip, with more space between icons, labels and menu arrows.'),
-            tr('The menu strip follows each button’s actual width in compact and expanded layouts, English and Brazilian Portuguese.'),
-            tr('Click the icon to run the main action, or the lower arrow to open its options. Capture, recording and editing commands are unchanged.'),
+            tr('Every screenshot is now copied to the clipboard automatically, ready to paste into a chat or another application.'),
+            tr('Full screen, individual monitor, window and region captures still save to the workspace and open in the editor.'),
+            tr('Use Copy image to copy your edits. On X11, keep ScreenDepresso open while pasting into other applications.'),
         )
     )

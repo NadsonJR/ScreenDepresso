@@ -81,6 +81,9 @@ CATALOG = {
 }
 CATALOG.update({'Capture full screen': 'Capturar tela inteira', 'Capture window': 'Capturar janela', 'Capture region': 'Capturar região', 'Unsupported language': 'Idioma não suportado'})
 CATALOG.update({
+ 'Every screenshot is now copied to the clipboard automatically, ready to paste into a chat or another application.': 'Toda captura de tela agora é copiada automaticamente para a área de transferência, pronta para colar em um chat ou outro aplicativo.',
+ 'Full screen, individual monitor, window and region captures still save to the workspace and open in the editor.': 'Capturas de tela inteira, monitor individual, janela e região continuam sendo salvas no workspace e abertas no editor.',
+ 'Use Copy image to copy your edits. On X11, keep ScreenDepresso open while pasting into other applications.': 'Use Copiar imagem para copiar suas edições. No X11, mantenha o ScreenDepresso aberto ao colar em outros aplicativos.',
  'Top toolbar menus now open from the lower strip, with more space between icons, labels and menu arrows.': 'Os menus da barra superior agora abrem pela faixa inferior, com mais espaço entre ícones, textos e setas de menu.',
  'The menu strip follows each button’s actual width in compact and expanded layouts, English and Brazilian Portuguese.': 'A faixa do menu acompanha a largura real de cada botão nos layouts compacto e expandido, em inglês e português brasileiro.',
  'Click the icon to run the main action, or the lower arrow to open its options. Capture, recording and editing commands are unchanged.': 'Clique no ícone para executar a ação principal ou na seta inferior para abrir suas opções. Os comandos de captura, gravação e edição permanecem iguais.',

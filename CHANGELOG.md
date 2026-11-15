@@ -4,6 +4,12 @@ Histórico consolidado das notas de versão e das seções cronológicas anterio
 
 Os instaladores publicados ficam nas [Releases](https://github.com/NadsonJR/ScreenDepresso/releases).
 
+## 0.7.6
+
+- Toda captura de tela inteira, monitor individual, janela ou região é copiada automaticamente para a área de transferência, pronta para colar em chats e outros aplicativos.
+- As capturas continuam sendo salvas no workspace e abertas em abas do editor. Cada novo print substitui a imagem no clipboard; **Copiar imagem** continua copiando as edições da aba atual.
+- Notas de atualização em inglês e português brasileiro e testes de cópia automática nos quatro modos de captura, capturas consecutivas e cancelamento.
+
 ## 0.7.5
 
 - Layout da barra superior ajustado: os menus de **Tela inteira** e **Gravar** ficam na faixa inferior dos respectivos botões, com espaço separado para ícone, texto e seta.
