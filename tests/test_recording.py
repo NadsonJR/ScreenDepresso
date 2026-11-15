@@ -55,6 +55,85 @@ def test_system_audio_source_pads_silence_upmixes_and_bounds_backlog():
     assert source.frames <= int(RATE*MAX_BACKLOG)
 
 
+def test_muted_or_paused_audio_never_reaches_the_recording():
+    import pytest
+    np = pytest.importorskip('numpy')
+    from screendepresso.system_audio import AudioMixer, _Source
+    mixer = AudioMixer(system=True, microphone=True)
+    system, mic = _Source('system', None), _Source('microphone', None)
+    mixer._sources = [system, mic]
+    loud = np.ones((4800, 2), np.float32)  # ~100 ms waiting in the jitter buffer
+    system.push(loud), mic.push(loud)
+    mixer.muted = True  # buffered microphone audio is discarded, system audio is kept
+    assert system.frames == 4800 and mic.frames == 0
+    mic.push(loud)
+    assert mic.frames == 0
+    mixer.muted = False
+    mic.push(loud)
+    assert mic.frames == 4800
+    system.push(loud)
+    mixer.paused = True  # everything captured so far and meanwhile is dropped
+    system.push(loud), mic.push(loud)
+    assert system.frames == 0 and mic.frames == 0
+    mixer.paused = False
+    assert not system.take(10).any() and not mic.take(10).any()
+    system.push(loud)
+    assert system.take(10).all()
+
+
+def test_stop_does_not_close_a_device_that_is_still_being_read():
+    import threading
+    import time
+    from screendepresso.system_audio import AudioMixer, _Source
+    inside, release, events = threading.Event(), threading.Event(), []
+
+    class Device:
+        def record(self, numframes=None):
+            inside.set()
+            release.wait(5)
+            events.append('read returned')
+            return []
+
+        def __exit__(self, *args):
+            events.append('closed')
+
+    mixer = AudioMixer()
+    mixer.problem.connect(lambda message: None)
+    source = _Source('system', Device())
+    reader = threading.Thread(target=mixer._read, args=(source,), daemon=True)
+    reader.start()
+    assert inside.wait(2)
+    mixer._stop.set()
+    reader.join(0.3)
+    assert reader.is_alive() and events == []  # a pending read keeps the device open
+    release.set()
+    reader.join(2)
+    assert not reader.is_alive() and events == ['read returned', 'closed']
+
+
+def test_audio_problems_are_collected_and_reach_the_user(tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path/'config'))
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path/'data'))
+    from PySide6.QtWidgets import QMessageBox
+    from screendepresso.app import MainWindow
+    window = MainWindow()
+    try:
+        recorder = window.recorder
+        recorder._audio_problem('system audio: no device')
+        recorder._audio_problem('system audio: no device')
+        assert recorder.audio_problems == ['system audio: no device']
+        assert 'system audio: no device' in window.statusBar().currentMessage()
+        warnings = []
+        monkeypatch.setattr(QMessageBox, 'warning', lambda *args: warnings.append(args[2]))
+        temporary, final = window.history.recording_target()
+        temporary.write_bytes(b'video')
+        window._recording_target = (window.history, final, None)
+        window.recording_saved(str(temporary))
+        assert final.exists() and len(warnings) == 1 and 'system audio: no device' in warnings[0]
+    finally:
+        window.close()
+
+
 def test_region_crop_scales_to_frame_pixels_with_even_size():
     screen = QRect(1920, 0, 1280, 720)
     crop = region_crop(QRect(2020, 50, 301, 201), screen, QSize(2560, 1440))

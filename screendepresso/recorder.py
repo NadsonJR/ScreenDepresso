@@ -137,9 +137,11 @@ class ScreenRecorder(QObject):
     saved = Signal(str)
     failed = Signal(str)
     discarded = Signal()
+    audio_problem = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.audio_problems = []
         self.state = 'idle'
         self.path = None
         self._objects = []
@@ -213,7 +215,10 @@ class ScreenRecorder(QObject):
         self._objects.append(source)
         self._audio = None
         self._mixer = None
+        self.audio_problems = []
         microphone = options['microphone'] and microphone_permission() == 'granted'
+        if options['system_audio'] and not system_audio_supported():
+            self._audio_problem(tr('System audio recording is not available on this system.'))
         if options['system_audio'] and system_audio_supported():
             # One session takes a single audio source, so the microphone is
             # mixed with the system audio before it reaches the encoder.
@@ -226,6 +231,8 @@ class ScreenRecorder(QObject):
                 self._audio = QAudioInput(device, self)
                 session.setAudioInput(self._audio)
                 self._objects.append(self._audio)
+            else:
+                self._audio_problem(tr('Microphone: no input device is available.'))
         self._recorder = recorder
         self._set_state('starting')
         source.start()
@@ -244,7 +251,8 @@ class ScreenRecorder(QObject):
         session.setAudioBufferInput(buffers)
         mixer = AudioMixer(system=True, microphone=microphone, microphone_id=microphone_id, parent=self)
         mixer.chunk.connect(self._send_audio)
-        mixer.problem.connect(lambda message: print('ScreenDepresso audio:', message, file=sys.stderr))
+        # A bound method keeps delivery on the Qt thread: the mixer reports from its own.
+        mixer.problem.connect(self._audio_problem)
         buffers.readyToSendAudioBuffer.connect(self._flush_audio)
         self._audio_format = audio_format
         self._audio_buffers = buffers
@@ -252,6 +260,13 @@ class ScreenRecorder(QObject):
         self._audio_time = 0
         self._mixer = mixer
         self._objects.extend([buffers, mixer])
+
+    def _audio_problem(self, message):
+        """Keep the cause for the end-of-recording notice, log it and tell the UI now."""
+        print('ScreenDepresso audio:', message, file=sys.stderr)
+        if message not in self.audio_problems:
+            self.audio_problems.append(message)
+        self.audio_problem.emit(message)
 
     def _send_audio(self, data):
         from PySide6.QtCore import QByteArray
@@ -314,6 +329,8 @@ class ScreenRecorder(QObject):
                 clock['paused_at'] = time.monotonic()
             if self._mixer is not None:
                 self._mixer.paused = True
+                # Audio queued for the encoder before the pause is not sent after it.
+                self._audio_pending = []
             self._recorder.pause()
 
     def resume(self):

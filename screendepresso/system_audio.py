@@ -21,6 +21,7 @@ CHANNELS = 2
 TICK = 0.02        # mixer period in seconds
 LATENCY = 0.1      # jitter buffer: output lags the wall clock by this much
 MAX_BACKLOG = 0.4  # drop older audio past this, so device clock drift cannot pile up
+STOP_TIMEOUT = 3.0  # how long stop() waits for the mixer and its readers
 
 
 def system_audio_supported():
@@ -80,6 +81,17 @@ class _Source:
         self.lock = threading.Lock()
         self.blocks = []
         self.frames = 0
+        self.dropping = False
+
+    def set_dropping(self, dropping):
+        """While dropping, pushed audio is discarded. Entering or leaving the
+        state also empties the FIFO, so audio captured during a muted or paused
+        interval (it waits in the jitter buffer) can never reach the video."""
+        with self.lock:
+            if dropping == self.dropping:
+                return
+            self.dropping = dropping
+            self.blocks, self.frames = [], 0
 
     def push(self, data):
         import numpy as np
@@ -93,6 +105,8 @@ class _Source:
         elif data.shape[1] > CHANNELS:
             data = data[:, :CHANNELS]
         with self.lock:
+            if self.dropping:
+                return
             self.blocks.append(data)
             self.frames += len(data)
 
@@ -126,8 +140,9 @@ class AudioMixer(QObject):
         self.system = system
         self.microphone = microphone
         self.microphone_id = microphone_id
-        self.muted = False
-        self.paused = False
+        self._muted = False
+        self._paused = False
+        self._sources = []
         self._stop = threading.Event()
         self._thread = None
         self._mic = None
@@ -137,6 +152,35 @@ class AudioMixer(QObject):
     @property
     def has_microphone(self):
         return self._mic_source is not None
+
+    @property
+    def muted(self):
+        return self._muted
+
+    @muted.setter
+    def muted(self, value):
+        self._muted = bool(value)
+        self._apply_gates()
+
+    @property
+    def paused(self):
+        return self._paused
+
+    @paused.setter
+    def paused(self, value):
+        self._paused = bool(value)
+        self._apply_gates()
+
+    def _warn(self, message):
+        try:
+            self.problem.emit(message)
+        except RuntimeError:  # the object is already being deleted
+            pass
+
+    def _apply_gates(self):
+        """Discard, at the source, whatever a mute or pause must not record."""
+        for source in list(self._sources):
+            source.set_dropping(self._paused or (self._muted and source.name == 'microphone'))
 
     def start(self):
         """Call from the Qt thread: the microphone is read with QAudioSource,
@@ -158,8 +202,11 @@ class AudioMixer(QObject):
             self._mic.stop()
             self._mic = self._mic_io = None
         if self._thread is not None:
-            self._thread.join(timeout=1.5)
-            self._thread = None
+            self._thread.join(timeout=STOP_TIMEOUT)
+            if self._thread.is_alive():
+                self._warn('audio thread did not stop in time')
+            else:
+                self._thread = None
 
     def _start_microphone(self):
         from PySide6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
@@ -228,6 +275,14 @@ class AudioMixer(QObject):
                 else:
                     time.sleep(0.005)
         finally:
+            # The device is released by the thread that reads it, only once
+            # the read has returned: closing it under a pending read would
+            # free resources that read is still using.
+            try:
+                if source.recorder is not None:
+                    source.recorder.__exit__(None, None, None)
+            except Exception:
+                pass
             _com_uninit(com)
 
     def _run(self):
@@ -249,6 +304,8 @@ class AudioMixer(QObject):
                 readers.append(reader)
             if self._mic_source is not None:
                 sources.append(self._mic_source)
+            self._sources = sources
+            self._apply_gates()
             # Silence is still sent when no device opened, keeping A/V in step
             # and the file's audio track present.
             start = time.monotonic()+LATENCY
@@ -273,12 +330,11 @@ class AudioMixer(QObject):
             self.problem.emit(str(exc))
         finally:
             self._stop.set()
+            deadline = time.monotonic()+STOP_TIMEOUT-0.5
             for reader in readers:
-                reader.join(timeout=1.0)
-            for source in sources:
-                try:
-                    if source.recorder is not None:
-                        source.recorder.__exit__(None, None, None)
-                except Exception:
-                    pass
+                reader.join(timeout=max(0.0, deadline-time.monotonic()))
+                if reader.is_alive():
+                    # Still inside a device read: it closes the device itself
+                    # when that read returns; nothing is freed from here.
+                    self._warn('audio device is still busy and will be released when it responds')
             _com_uninit(com)

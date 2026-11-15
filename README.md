@@ -148,7 +148,7 @@ Em **Settings → Recording**, ajuste:
 - Contagem regressiva: desativada, 3 ou 5 segundos.
 - Gravação do microfone e dispositivo de entrada.
 
-A barra flutuante permite **pausar/retomar**, **silenciar o microfone**, **parar e salvar** ou **descartar**. Descartar pede confirmação e restaura o editor. Os vídeos são salvos em **MP4**, com H.264 quando há codificador disponível e fallback para MPEG-4. Áudio do sistema não é capturado.
+A barra flutuante permite **pausar/retomar**, **silenciar o microfone**, **parar e salvar** ou **descartar**. Descartar pede confirmação e restaura o editor. Os vídeos são salvos em **MP4**, com H.264 quando há codificador disponível e fallback para MPEG-4. O áudio do sistema (alto-falantes ou fones) é gravado no Windows e no Linux quando a opção está ativa; no macOS não é capturado. Pausar ou silenciar o microfone descarta o áudio desse intervalo, e falhas de áudio são avisadas durante e após a gravação.
 
 Cada gravação acompanha um monitor. Uma região que cruza monitores fica limitada ao monitor escolhido; a captura de janela pode usar sua área visível como fallback. No Linux/X11, os controles aparecem na gravação de tela inteira. Em regiões que ocupam quase toda a tela, pode não haver espaço externo para a barra. A exclusão dos controles da captura depende do suporte do sistema.
 

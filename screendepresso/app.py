@@ -320,6 +320,7 @@ class MainWindow(QMainWindow):
         self.recorder.state_changed.connect(self.recording_state_changed)
         self.recorder.saved.connect(self.recording_saved)
         self.recorder.failed.connect(self.recording_failed)
+        self.recorder.audio_problem.connect(self.recording_audio_problem)
         self.recorder.discarded.connect(self.recording_finished)
         self.recording_bar = None
         self.region_frame = None
@@ -1320,8 +1321,18 @@ class MainWindow(QMainWindow):
         if self._restore_after_recording:
             self.open_editor()
 
+    def recording_audio_problem(self, message):
+        """Tell the user right away that the audio they asked for is not being recorded."""
+        text = tr('Audio problem: ')+message
+        self.statusBar().showMessage(text, 10000)
+        if self.tray.isVisible() and QSystemTrayIcon.supportsMessages():
+            self.tray.showMessage(tr('Recording'), text, QSystemTrayIcon.MessageIcon.Warning, 8000)
+        if self.recording_bar is not None:
+            self.recording_bar.setToolTip(text)
+
     def recording_saved(self, path):
         store, final, poster = self._recording_target
+        problems = list(self.recorder.audio_problems)
         try:
             path = str(store.add_video(path, final, poster))
         except OSError as exc:
@@ -1332,6 +1343,9 @@ class MainWindow(QMainWindow):
         self.last_recording = path
         self.recording_finished()
         self.workspace.refresh(select=path)
+        if problems:
+            # The video exists, but not as requested: say so before it is found out by playing it.
+            QMessageBox.warning(self, tr('Recording'), tr('The recording was saved, but its audio is incomplete or missing:')+'\n- '+'\n- '.join(problems))
         message = tr('Recording saved in the workspace: ')+Path(path).name
         self.statusBar().showMessage(message, 8000)
         if self.tray.isVisible() and QSystemTrayIcon.supportsMessages():
