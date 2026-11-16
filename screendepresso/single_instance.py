@@ -60,6 +60,9 @@ class SingleInstance(QObject):
                     completed[0] = True
                     if bytes(received) == b'activate\n':
                         self.pending_activation = True
+                        # Tell the sender it was heard: writing to a pipe does not
+                        # prove the owner ever read it.
+                        socket.write(b'ok\n')
                         self.activation_requested.emit()
                     socket.disconnectFromServer()
 
@@ -94,11 +97,30 @@ class SingleInstance(QObject):
             socket.connectToServer(self.name)
             if socket.waitForConnected(100):
                 written = socket.write(b'activate\n')
-                if written == len(b'activate\n') and (socket.bytesToWrite() == 0 or socket.waitForBytesWritten(500)):
-                    socket.disconnectFromServer()
-                    return True
+                if written == len(b'activate\n'):
+                    # Only the owner's answer proves delivery. Giving up on a slow
+                    # flush and sending again would activate the owner twice.
+                    if socket.bytesToWrite():
+                        socket.waitForBytesWritten(300)
+                    if self._acknowledged(socket, 400):
+                        socket.disconnectFromServer()
+                        return True
                 socket.abort()
             time.sleep(0.05)
+        return False
+
+    @staticmethod
+    def _acknowledged(socket, timeout_ms=500):
+        """True once the owner answered 'ok' or closed the connection after
+        reading (an older owner closes without answering). Silence means the
+        request may never have been read, so the caller connects again."""
+        deadline = time.monotonic()+timeout_ms/1000
+        while time.monotonic() < deadline:
+            if socket.bytesAvailable():
+                return bytes(socket.readAll()).startswith(b'ok')
+            if socket.state() == QLocalSocket.LocalSocketState.UnconnectedState:
+                return True
+            socket.waitForReadyRead(50)
         return False
 
     def release(self):
